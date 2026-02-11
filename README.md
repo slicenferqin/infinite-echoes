@@ -1,36 +1,91 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Infinite Echoes
 
-## Getting Started
+AI 叙事推理游戏，核心是“可对话世界”而不是“固定谜题表单”。
 
-First, run the development server:
+玩家通过与 NPC 对话、建立信任、解锁社交 lead，再进入关键搜查点推进案件。  
+目前已完成 EP01 / EP02 / EP03 结构，并支持账号隔离、进度持久化、实时天机制与身份池玩法。
+
+## Core Features
+
+- Server Authoritative 会话：客户端只提交 action/submission，状态由服务端持有。
+- 强社交推理：非 BE 路线有社交资格门槛，纯跑图默认趋向 BE。
+- 实时天机制：按副本配置推进时段事件与不可逆窗口。
+- 身份池系统：开局随机身份，无重抽，影响对话偏置、硬权限和风险代价。
+- 多副本注册中心：按通关进度解锁后续副本（ep01 -> ep02 -> ep03）。
+- 账号与进度持久化：用户名密码登录，SQLite 存储，支持续玩与结算记录。
+- 前端交互优化：行动即时反馈、路线进度可视化、结算去泄漏。
+
+## Episode Progression
+
+- `ep01`：默认解锁。
+- `ep02`：通关 `ep01`（HE/TE/SE 任一）后解锁。
+- `ep03`：通关 `ep02`（HE/TE/SE 任一）后解锁。
+
+## Tech Stack
+
+- Next.js 16 (App Router)
+- React 19 + TypeScript
+- SQLite (`better-sqlite3`)
+- Zod validation
+- bcryptjs password hash
+- OpenAI-compatible LLM gateway
+
+## Quick Start
+
+```bash
+npm install
+cp .env.local.example .env.local
+npm run dev
+```
+
+Open `http://localhost:3000`.
+
+## Environment Variables
+
+Create `.env.local` from `.env.local.example`:
+
+```bash
+LLM_BASE_URL=https://your-llm-gateway.example.com/api/v1
+LLM_API_KEY=your_api_key_here
+LLM_MODEL=claude-haiku-4-5-20251001
+APP_DB_PATH=./data/dev.sqlite
+AUTH_COOKIE_SECURE=false
+```
+
+Notes:
+- `LLM_BASE_URL` must be OpenAI-compatible (`/chat/completions`).
+- Production should set `AUTH_COOKIE_SECURE=true`.
+- `APP_DB_PATH` should point to a persistent disk path in production.
+
+## Scripts
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run lint
+npm run build
+npm run start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Project Structure
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```text
+src/
+  app/               # UI + API routes
+  components/        # game UI
+  lib/
+    agents/          # GM/NPC prompts + parser
+    engine/          # state engine + settlement routing
+    episodes/        # ep01/ep02/ep03 definitions
+    identity/        # identity pool + risk/unlock hooks
+    social/          # social lead + eligibility audit
+    timeline/        # realtime day pacing
+    auth/            # login/session guard
+    db/              # SQLite access
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Current Status
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- lint/build passing locally
+- ep01 + ep02 + ep03 integrated
+- unlock chain and session ownership checks enabled
+- route progress and governance indicators integrated in UI

@@ -1,0 +1,1310 @@
+'use client';
+
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import {
+  EpisodeConfig,
+  GameAction,
+  GameState,
+  NarrativeEntry,
+  SettlementResult,
+  TimelinePauseReason,
+} from '@/lib/types';
+import {
+  computeRouteProgress,
+  diffRouteProgress,
+  RouteProgressSnapshot,
+} from '@/lib/progress/route-progress';
+import { getIdentityPresentation, resolveIdentityForState } from '@/lib/identity/system';
+
+interface ApiFailure {
+  error?: string;
+  code?: string;
+  retryAfterMs?: number;
+}
+
+interface OptimisticEntry extends NarrativeEntry {
+  id: string;
+  status: 'pending' | 'failed';
+}
+
+interface TimelineViewModel {
+  mode: 'round' | 'realtime_day';
+  currentDay: number;
+  totalDays: number;
+  slotLabel: string;
+  remainingSecInDay: number;
+  remainingSecTotal: number;
+  isPaused: boolean;
+  pauseReason?: TimelinePauseReason;
+}
+
+
+type TalkApproach = NonNullable<GameAction['approach']>;
+
+const TALK_APPROACH_OPTIONS: Array<{ value: TalkApproach; label: string }> = [
+  { value: 'neutral', label: '平稳追问' },
+  { value: 'empathy', label: '共情安抚' },
+  { value: 'pressure', label: '强势施压' },
+  { value: 'exchange', label: '交换条件' },
+  { value: 'present_evidence', label: '出示证据' },
+];
+
+const TALK_APPROACH_HINT: Record<TalkApproach, string> = {
+  neutral: '稳住语气，优先厘清事实顺序。',
+  empathy: '先接住情绪，再推动信息松口。',
+  pressure: '短期逼供有效，但容易引发反弹。',
+  exchange: '可换信息，但会抬高对方筹码。',
+  present_evidence: '用已掌握线索拆穿口供。',
+};
+
+function createOptimisticId() {
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function formatClock(totalSec: number): string {
+  const seconds = Math.max(0, Math.ceil(totalSec));
+  const mm = Math.floor(seconds / 60)
+    .toString()
+    .padStart(2, '0');
+  const ss = Math.floor(seconds % 60)
+    .toString()
+    .padStart(2, '0');
+  return `${mm}:${ss}`;
+}
+
+function formatPauseReason(reason?: TimelinePauseReason): string {
+  if (reason === 'background') return '页面不在前台，计时已暂停';
+  if (reason === 'offline') return '网络离线，计时已暂停';
+  if (reason === 'settled') return '调查已结算';
+  return '计时已暂停';
+}
+
+function buildTimelineView(
+  state: GameState,
+  episodeConfig: EpisodeConfig,
+  nowMs: number
+): TimelineViewModel {
+  const timeline = state.timeline;
+
+  if (timeline.mode !== 'realtime_day') {
+    return {
+      mode: 'round',
+      currentDay: 1,
+      totalDays: 1,
+      slotLabel: `回合 ${state.round}/${state.maxRounds}`,
+      remainingSecInDay: Math.max(0, state.maxRounds - state.round),
+      remainingSecTotal: Math.max(0, state.maxRounds - state.round),
+      isPaused: false,
+    };
+  }
+
+  const slotLabels = timeline.slotLabels.length > 0 ? timeline.slotLabels : ['时段'];
+  const totalDays = Math.max(1, timeline.totalDays);
+  const dayDurationSec = Math.max(1, timeline.dayDurationSec);
+  const totalSec = totalDays * dayDurationSec;
+  const slotDurationSec =
+    timeline.slotDurationSec > 0
+      ? timeline.slotDurationSec
+      : dayDurationSec / Math.max(1, slotLabels.length);
+  const heartbeatTimeoutSec = Math.max(3, episodeConfig.pacing?.heartbeatTimeoutSec ?? 12);
+
+  const lastTickAt = timeline.lastTickAt || nowMs;
+  const lastHeartbeatAt = timeline.lastHeartbeatAt || nowMs;
+  const heartbeatDeadlineMs = lastHeartbeatAt + heartbeatTimeoutSec * 1000;
+
+  let elapsedSecTotal = clamp(timeline.elapsedSecTotal, 0, totalSec);
+  let isPaused = timeline.isPaused;
+  let pauseReason = timeline.pauseReason;
+
+  if (!timeline.isPaused) {
+    const effectiveNowMs = Math.min(nowMs, heartbeatDeadlineMs);
+    const deltaSec = Math.max(0, (effectiveNowMs - lastTickAt) / 1000);
+    elapsedSecTotal = clamp(timeline.elapsedSecTotal + deltaSec, 0, totalSec);
+
+    if (nowMs > heartbeatDeadlineMs && elapsedSecTotal < totalSec) {
+      isPaused = true;
+      pauseReason = 'background';
+    }
+  }
+
+  const remainingSecTotal = Math.max(0, totalSec - elapsedSecTotal);
+
+  const normalizedElapsed =
+    remainingSecTotal <= 0
+      ? totalSec - Number.EPSILON
+      : clamp(elapsedSecTotal, 0, totalSec - Number.EPSILON);
+
+  const dayIndex = clamp(Math.floor(normalizedElapsed / dayDurationSec), 0, totalDays - 1);
+  const currentDay = dayIndex + 1;
+  const elapsedInDay = normalizedElapsed - dayIndex * dayDurationSec;
+  const slotIndex = clamp(
+    Math.floor(elapsedInDay / slotDurationSec),
+    0,
+    slotLabels.length - 1
+  );
+
+  const remainingSecInDay =
+    remainingSecTotal <= 0
+      ? 0
+      : ((Math.ceil(remainingSecTotal) - 1) % dayDurationSec) + 1;
+
+  return {
+    mode: 'realtime_day',
+    currentDay,
+    totalDays,
+    slotLabel: slotLabels[slotIndex] ?? '未知时段',
+    remainingSecInDay,
+    remainingSecTotal,
+    isPaused,
+    pauseReason,
+  };
+}
+
+export default function GameView({
+  initialState,
+  sessionId,
+  episodeConfig,
+  onSessionExpired,
+}: {
+  initialState: GameState;
+  sessionId: string;
+  episodeConfig: EpisodeConfig;
+  onSessionExpired: () => void;
+}) {
+  const [state, setState] = useState<GameState>(initialState);
+  const [input, setInput] = useState('');
+  const [talkApproach, setTalkApproach] = useState<TalkApproach>('neutral');
+  const [presentedClueId, setPresentedClueId] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [showClues, setShowClues] = useState(false);
+  const [showMap, setShowMap] = useState(false);
+  const [showInventory, setShowInventory] = useState(false);
+  const [showSubmit, setShowSubmit] = useState(false);
+  const [submitText, setSubmitText] = useState('');
+  const [errorText, setErrorText] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const [pendingActionLabel, setPendingActionLabel] = useState<string | null>(null);
+  const [optimisticEntries, setOptimisticEntries] = useState<OptimisticEntry[]>([]);
+  const [settledRouteId, setSettledRouteId] = useState<string | null>(null);
+  const [routeProgress, setRouteProgress] = useState<RouteProgressSnapshot[]>(() =>
+    computeRouteProgress(episodeConfig, initialState)
+  );
+  const [progressToast, setProgressToast] = useState<string | null>(null);
+  const [slotToast, setSlotToast] = useState<string | null>(null);
+  const [highlightedRouteId, setHighlightedRouteId] = useState<string | null>(null);
+  const [clockNow, setClockNow] = useState(() => Date.now());
+
+  const logRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const progressRef = useRef<RouteProgressSnapshot[]>(routeProgress);
+  const slotRef = useRef<string>(`${initialState.timeline.currentDay}-${initialState.timeline.currentSlotIndex}`);
+  const toastTimerRef = useRef<number | null>(null);
+  const slotToastTimerRef = useRef<number | null>(null);
+  const routeHighlightTimerRef = useRef<number | null>(null);
+  const heartbeatInFlightRef = useRef(false);
+  const loadingRef = useRef(false);
+
+  const episode = episodeConfig;
+
+  useEffect(() => {
+    loadingRef.current = loading;
+  }, [loading]);
+
+  const timelineView = useMemo(
+    () => buildTimelineView(state, episode, clockNow),
+    [state, episode, clockNow]
+  );
+
+  const discoveredClues = useMemo(
+    () => episode.clues.filter((clue) => state.discoveredClues.includes(clue.id)),
+    [episode.clues, state.discoveredClues]
+  );
+
+  const presentableClues = useMemo(
+    () => discoveredClues.filter((clue) => !clue.isFalse),
+    [discoveredClues]
+  );
+
+  const currentIdentity = useMemo(
+    () => resolveIdentityForState(episode, state),
+    [episode, state]
+  );
+
+  const identityPresentation = useMemo(
+    () => getIdentityPresentation(currentIdentity),
+    [currentIdentity]
+  );
+
+  const identityRisk = state.socialLedger?.identityRisk ?? 0;
+  const identityRiskPercent = clamp(identityRisk, 0, 100);
+  const governanceLedger = state.governanceLedger ?? {
+    order: 50,
+    humanity: 50,
+    survival: 50,
+  };
+  const showGovernanceLedger = episode.id === 'ep03';
+
+  useEffect(() => {
+    if (talkApproach !== 'present_evidence') {
+      if (presentedClueId) {
+        setPresentedClueId('');
+      }
+      return;
+    }
+
+    if (presentableClues.length === 0) {
+      setTalkApproach('neutral');
+      setPresentedClueId('');
+      return;
+    }
+
+    if (!presentedClueId || !presentableClues.some((clue) => clue.id === presentedClueId)) {
+      setPresentedClueId(presentableClues[0].id);
+    }
+  }, [talkApproach, presentableClues, presentedClueId]);
+
+  function getNpcsAtLocation(locationId: string) {
+    return episode.npcs.filter((npc) => {
+      const npcState = state.npcStates[npc.id];
+      if (!npcState?.isAvailable) return false;
+      const npcLocation = npcState.locationOverride ?? npc.locationId;
+      return npcLocation === locationId;
+    });
+  }
+
+  const scrollToBottom = useCallback(() => {
+    if (logRef.current) {
+      logRef.current.scrollTop = logRef.current.scrollHeight;
+    }
+  }, []);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [state.narrativeLog, optimisticEntries, scrollToBottom]);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, [loading]);
+
+  useEffect(() => {
+    const tick = window.setInterval(() => {
+      setClockNow(Date.now());
+    }, 1000);
+
+    return () => {
+      window.clearInterval(tick);
+    };
+  }, []);
+
+  useEffect(() => {
+    const nextProgress = computeRouteProgress(episode, state, settledRouteId ?? undefined);
+    const deltas = diffRouteProgress(progressRef.current, nextProgress).filter((delta) => delta.delta > 0);
+
+    if (deltas.length > 0) {
+      const topDelta = deltas.sort((a, b) => b.delta - a.delta)[0];
+      setProgressToast(
+        `${getRouteTypeLabel(topDelta.routeType)}：「${topDelta.routeName}」+${topDelta.delta}%（${topDelta.current}%）`
+      );
+      setHighlightedRouteId(topDelta.routeId);
+
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+      if (routeHighlightTimerRef.current) {
+        window.clearTimeout(routeHighlightTimerRef.current);
+      }
+
+      toastTimerRef.current = window.setTimeout(() => {
+        setProgressToast(null);
+      }, 2800);
+
+      routeHighlightTimerRef.current = window.setTimeout(() => {
+        setHighlightedRouteId(null);
+      }, 1200);
+    }
+
+    progressRef.current = nextProgress;
+    setRouteProgress(nextProgress);
+  }, [episode, settledRouteId, state]);
+
+  useEffect(() => {
+    if (state.timeline.mode !== 'realtime_day') return;
+
+    const previous = slotRef.current;
+    const current = `${state.timeline.currentDay}-${state.timeline.currentSlotIndex}`;
+
+    if (previous === current) return;
+
+    slotRef.current = current;
+
+    if (state.phase === 'settlement' || sessionExpired) return;
+
+    const [previousDayRaw] = previous.split('-');
+    const previousDay = Number(previousDayRaw || state.timeline.currentDay);
+    const slotLabel = state.timeline.slotLabels[state.timeline.currentSlotIndex] ?? '未知时段';
+
+    const toastText =
+      previousDay !== state.timeline.currentDay
+        ? `【进入第${state.timeline.currentDay}天 · ${slotLabel}】`
+        : `【进入${slotLabel}】`;
+
+    setSlotToast(toastText);
+
+    if (slotToastTimerRef.current) {
+      window.clearTimeout(slotToastTimerRef.current);
+    }
+
+    slotToastTimerRef.current = window.setTimeout(() => {
+      setSlotToast(null);
+    }, 2200);
+  }, [
+    state.timeline.currentDay,
+    state.timeline.currentSlotIndex,
+    state.timeline.mode,
+    state.timeline.slotLabels,
+    state.phase,
+    sessionExpired,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+      if (routeHighlightTimerRef.current) window.clearTimeout(routeHighlightTimerRef.current);
+      if (slotToastTimerRef.current) window.clearTimeout(slotToastTimerRef.current);
+    };
+  }, []);
+
+  function consumeError(error: ApiFailure | null, fallback: string): string {
+    if (!error) return fallback;
+
+    if (
+      error.code === 'SESSION_EXPIRED' ||
+      error.code === 'SESSION_SETTLED' ||
+      error.code === 'UNAUTHORIZED' ||
+      error.code === 'SESSION_FORBIDDEN'
+    ) {
+      setSessionExpired(true);
+      return error.error ?? '会话已失效，请重新开始。';
+    }
+
+    if (error.code === 'ACTION_THROTTLED') {
+      const retrySec =
+        typeof error.retryAfterMs === 'number'
+          ? Math.max(1, Math.ceil(error.retryAfterMs / 1000))
+          : null;
+      return retrySec
+        ? `操作过快，请 ${retrySec} 秒后再试。`
+        : error.error ?? '操作过快，请稍后重试。';
+    }
+
+    return error.error ?? fallback;
+  }
+
+  const sendHeartbeat = useCallback(
+    async (payload: { visible: boolean; focused: boolean; online: boolean }) => {
+      if (sessionExpired || state.phase === 'settlement') return;
+      if (loadingRef.current) return;
+      if (heartbeatInFlightRef.current) return;
+
+      heartbeatInFlightRef.current = true;
+      try {
+        const res = await fetch('/api/heartbeat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId,
+            ...payload,
+          }),
+        });
+
+        const data = (await res.json()) as { state?: GameState; shouldSettle?: boolean } & ApiFailure;
+
+        if (!res.ok) {
+          setErrorText(consumeError(data, '心跳同步失败，请稍后重试。'));
+          return;
+        }
+
+        if (data.state) {
+          setState(data.state);
+        }
+      } catch (error) {
+        console.warn('heartbeat failed:', error);
+      } finally {
+        heartbeatInFlightRef.current = false;
+      }
+    },
+    [sessionExpired, sessionId, state.phase]
+  );
+
+  useEffect(() => {
+    if (sessionExpired) return;
+
+    const intervalSec = Math.max(1, episode.pacing?.heartbeatIntervalSec ?? 5);
+
+    const collectPresence = () => ({
+      visible: document.visibilityState === 'visible',
+      focused: document.hasFocus(),
+      online: navigator.onLine,
+    });
+
+    void sendHeartbeat(collectPresence());
+
+    const interval = window.setInterval(() => {
+      void sendHeartbeat(collectPresence());
+    }, intervalSec * 1000);
+
+    const handlePresenceEvent = () => {
+      void sendHeartbeat(collectPresence());
+    };
+
+    document.addEventListener('visibilitychange', handlePresenceEvent);
+    window.addEventListener('focus', handlePresenceEvent);
+    window.addEventListener('blur', handlePresenceEvent);
+    window.addEventListener('online', handlePresenceEvent);
+    window.addEventListener('offline', handlePresenceEvent);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', handlePresenceEvent);
+      window.removeEventListener('focus', handlePresenceEvent);
+      window.removeEventListener('blur', handlePresenceEvent);
+      window.removeEventListener('online', handlePresenceEvent);
+      window.removeEventListener('offline', handlePresenceEvent);
+    };
+  }, [episode.pacing?.heartbeatIntervalSec, sendHeartbeat, sessionExpired]);
+
+  function resolveLocationLabel(target?: string): string {
+    if (!target) return '未知地点';
+    const location = episode.locations.find((loc) => loc.id === target || loc.name === target || loc.name.includes(target));
+    return location?.name ?? target;
+  }
+
+  function buildOptimisticContext(action: GameAction): {
+    entries: OptimisticEntry[];
+    pendingLabel: string;
+  } {
+    const now = Date.now();
+
+    switch (action.type) {
+      case 'talk': {
+        const content = action.content?.trim() || '……';
+        const target = action.target ?? '对方';
+        const approach = (action.approach ?? 'neutral') as TalkApproach;
+        const approachLabel = TALK_APPROACH_OPTIONS.find((option) => option.value === approach)?.label ?? '平稳追问';
+        const evidenceName =
+          approach === 'present_evidence' && action.presentedClueId
+            ? episode.clues.find((clue) => clue.id === action.presentedClueId)?.name
+            : undefined;
+
+        return {
+          entries: [
+            {
+              id: createOptimisticId(),
+              type: 'player',
+              speaker: '你',
+              content,
+              round: state.round,
+              timestamp: now,
+              status: 'pending',
+            },
+          ],
+          pendingLabel:
+            approach === 'present_evidence'
+              ? `正在以「${approachLabel}」和 ${target} 对话${evidenceName ? `（出示：${evidenceName}）` : ''}`
+              : `正在以「${approachLabel}」和 ${target} 对话`,
+        };
+      }
+      case 'examine':
+        return {
+          entries: [
+            {
+              id: createOptimisticId(),
+              type: 'player',
+              speaker: '你',
+              content: `我开始搜查「${action.target ?? '周围'}」……`,
+              round: state.round,
+              timestamp: now,
+              status: 'pending',
+            },
+          ],
+          pendingLabel: `正在搜查 ${action.target ?? '目标'}`,
+        };
+      case 'move':
+        return {
+          entries: [
+            {
+              id: createOptimisticId(),
+              type: 'player',
+              speaker: '你',
+              content: `我动身前往「${resolveLocationLabel(action.target)}」……`,
+              round: state.round,
+              timestamp: now,
+              status: 'pending',
+            },
+          ],
+          pendingLabel: `正在前往 ${resolveLocationLabel(action.target)}`,
+        };
+      default:
+        return {
+          entries: [
+            {
+              id: createOptimisticId(),
+              type: 'player',
+              speaker: '你',
+              content: '我环顾四周。',
+              round: state.round,
+              timestamp: now,
+              status: 'pending',
+            },
+          ],
+          pendingLabel: '正在观察周围',
+        };
+    }
+  }
+
+  async function sendAction(action: GameAction) {
+    if (sessionExpired) return;
+
+    const optimistic = buildOptimisticContext(action);
+    setOptimisticEntries(optimistic.entries);
+    setPendingActionLabel(optimistic.pendingLabel);
+    setLoading(true);
+    setErrorText(null);
+
+    try {
+      const res = await fetch('/api/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, action }),
+      });
+      const data = (await res.json()) as { state?: GameState } & ApiFailure;
+
+      if (!res.ok) {
+        setOptimisticEntries((entries) => entries.map((entry) => ({ ...entry, status: 'failed' })));
+        setPendingActionLabel(null);
+        setErrorText(consumeError(data, '行动处理失败，请稍后重试。'));
+        return;
+      }
+
+      setOptimisticEntries([]);
+      setPendingActionLabel(null);
+
+      if (data.state) {
+        setState(data.state);
+      }
+    } catch (err) {
+      console.error('Action failed:', err);
+      setOptimisticEntries((entries) => entries.map((entry) => ({ ...entry, status: 'failed' })));
+      setPendingActionLabel(null);
+      setErrorText('网络异常，行动未生效。');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleSubmitReasoning() {
+    if (!submitText.trim() || sessionExpired) return;
+
+    const pendingEntry: OptimisticEntry = {
+      id: createOptimisticId(),
+      type: 'player',
+      speaker: '你的推理',
+      content: submitText.trim(),
+      round: state.round,
+      timestamp: Date.now(),
+      status: 'pending',
+    };
+
+    setOptimisticEntries([pendingEntry]);
+    setPendingActionLabel('正在评估你的推理');
+    setLoading(true);
+    setShowSubmit(false);
+    setErrorText(null);
+
+    try {
+      const res = await fetch('/api/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, submission: submitText }),
+      });
+      const data = (await res.json()) as {
+        state?: GameState;
+        settlement?: SettlementResult;
+      } & ApiFailure;
+
+      if (!res.ok) {
+        setOptimisticEntries((entries) => entries.map((entry) => ({ ...entry, status: 'failed' })));
+        setPendingActionLabel(null);
+        setErrorText(consumeError(data, '提交失败，请稍后重试。'));
+        return;
+      }
+
+      setOptimisticEntries([]);
+      setPendingActionLabel(null);
+
+      if (data.state) setState(data.state);
+      setSettledRouteId(data.settlement?.route?.id ?? null);
+    } catch (err) {
+      console.error('Submit failed:', err);
+      setOptimisticEntries((entries) => entries.map((entry) => ({ ...entry, status: 'failed' })));
+      setPendingActionLabel(null);
+      setErrorText('网络异常，提交未完成。');
+    } finally {
+      setLoading(false);
+      setSubmitText('');
+    }
+  }
+
+  function buildTalkAction(target: string, content: string): GameAction | null {
+    const normalizedTarget = target.trim();
+    const normalizedContent = content.trim();
+
+    if (!normalizedTarget || !normalizedContent) {
+      return null;
+    }
+
+    if (talkApproach === 'present_evidence' && !presentedClueId) {
+      setErrorText('你选择了“出示证据”，但还没有指定要出示的线索。');
+      return null;
+    }
+
+    return {
+      type: 'talk',
+      target: normalizedTarget,
+      content: normalizedContent,
+      approach: talkApproach,
+      presentedClueId: talkApproach === 'present_evidence' ? presentedClueId : undefined,
+    };
+  }
+
+  function parseInput(raw: string) {
+    const trimmed = raw.trim();
+    if (!trimmed || sessionExpired) return;
+
+    const moveMatch = trimmed.match(/^(?:去|前往|移动到?|走到?|go\s+to?)\s*(.+)/i);
+    if (moveMatch) {
+      void sendAction({ type: 'move', target: moveMatch[1] });
+      return;
+    }
+
+    const examineMatch = trimmed.match(/^(?:搜查|查看|检查|观察|搜索|examine|look\s+at)\s*(.+)/i);
+    if (examineMatch) {
+      void sendAction({ type: 'examine', target: examineMatch[1] });
+      return;
+    }
+
+    const talkMatch = trimmed.match(/^(?:对|跟|和|向|问)\s*(.+?)\s*(?:说|问|聊|：|:)\s*(.+)/);
+    if (talkMatch) {
+      const talkAction = buildTalkAction(talkMatch[1], talkMatch[2]);
+      if (talkAction) {
+        void sendAction(talkAction);
+      }
+      return;
+    }
+
+    if (/^(?:环顾|四处看|看看|look|look around)$/i.test(trimmed)) {
+      void sendAction({ type: 'look' });
+      return;
+    }
+
+    const npcsHere = getNpcsAtLocation(state.currentLocation);
+    if (npcsHere.length === 1) {
+      const talkAction = buildTalkAction(npcsHere[0].id, trimmed);
+      if (talkAction) {
+        void sendAction(talkAction);
+      }
+      return;
+    }
+
+    void sendAction({ type: 'examine', target: trimmed });
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      parseInput(input);
+      setInput('');
+    }
+  }
+
+  function getEntryColor(type: NarrativeEntry['type']): string {
+    switch (type) {
+      case 'gm':
+        return 'var(--gm-color)';
+      case 'npc':
+        return 'var(--npc-color)';
+      case 'player':
+        return 'var(--player-color)';
+      case 'system':
+        return 'var(--system-color)';
+      case 'clue':
+        return 'var(--clue-color)';
+      default:
+        return 'var(--foreground)';
+    }
+  }
+
+  function getEntryPrefix(entry: NarrativeEntry): string {
+    switch (entry.type) {
+      case 'gm':
+        return '';
+      case 'npc':
+        return `【${entry.speaker}】`;
+      case 'player':
+        return `【${entry.speaker || state.player.name}】`;
+      case 'system':
+        return '';
+      case 'clue':
+        return '🔍 ';
+      default:
+        return '';
+    }
+  }
+
+  function getRouteTypeLabel(routeType: RouteProgressSnapshot['routeType']): string {
+    return routeType === 'BE' ? 'BE风险' : routeType;
+  }
+
+  const currentLoc = episode.locations.find((l) => l.id === state.currentLocation);
+  const connectedLocs = (currentLoc?.connectedTo
+    .map((id) => episode.locations.find((l) => l.id === id))
+    .filter((loc): loc is EpisodeConfig['locations'][number] => !!loc)) ?? [];
+  const npcsHere = getNpcsAtLocation(state.currentLocation);
+
+  return (
+    <div className="h-screen flex flex-col">
+      <div
+        className="flex items-center justify-between px-4 py-2 text-xs border-b shrink-0"
+        style={{ borderColor: 'var(--border)', color: 'var(--muted)' }}
+      >
+        <div className="flex items-center gap-4 flex-wrap">
+          <span style={{ color: 'var(--system-color)' }}>{episode.name}</span>
+          {timelineView.mode === 'realtime_day' ? (
+            <span>
+              第{timelineView.currentDay}/{timelineView.totalDays}天 · {timelineView.slotLabel} ·{' '}
+              {formatClock(timelineView.remainingSecInDay)}
+            </span>
+          ) : (
+            <span>回合 {state.round}/{state.maxRounds}</span>
+          )}
+          <span>📍 {currentLoc?.name ?? '未知'}</span>
+          <span>线索 {discoveredClues.length}/{episode.clues.filter((c) => !c.isFalse).length}</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowMap(!showMap)}
+            className="hover:opacity-80 transition-opacity"
+            style={{ color: showMap ? 'var(--system-color)' : 'var(--muted)' }}
+          >
+            地图
+          </button>
+          <button
+            onClick={() => setShowClues(!showClues)}
+            className="hover:opacity-80 transition-opacity"
+            style={{ color: showClues ? 'var(--clue-color)' : 'var(--muted)' }}
+          >
+            线索
+          </button>
+          <button
+            onClick={() => setShowInventory(!showInventory)}
+            className="hover:opacity-80 transition-opacity"
+            style={{ color: showInventory ? 'var(--system-color)' : 'var(--muted)' }}
+          >
+            背包{state.inventory.length > 0 ? ` (${state.inventory.length})` : ''}
+          </button>
+          {state.phase !== 'settlement' && (
+            <button
+              onClick={() => setShowSubmit(!showSubmit)}
+              className="hover:opacity-80 transition-opacity"
+              style={{ color: 'var(--system-color)' }}
+            >
+              提交推理
+            </button>
+          )}
+          {state.phase === 'settlement' && !sessionExpired && (
+            <button
+              onClick={onSessionExpired}
+              className="hover:opacity-80 transition-opacity"
+              style={{ color: 'var(--system-color)' }}
+            >
+              返回裂隙门
+            </button>
+          )}
+          {sessionExpired && (
+            <button
+              onClick={onSessionExpired}
+              className="hover:opacity-80 transition-opacity"
+              style={{ color: 'var(--system-color)' }}
+            >
+              重新开始
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="lg:hidden border-b px-4 py-2 text-[11px] space-y-1" style={{ borderColor: 'var(--border)', color: 'var(--muted)' }}>
+        <div>
+          身份：{currentIdentity.name} · 风险 {identityRisk}
+        </div>
+        {showGovernanceLedger && (
+          <div>
+            治理：秩序 {governanceLedger.order} · 人性 {governanceLedger.humanity} · 生存 {governanceLedger.survival}
+          </div>
+        )}
+        <div>
+          {routeProgress.length === 0 ? (
+            <span>尚未锁定结局线索</span>
+          ) : (
+            routeProgress.map((entry) => (
+              <span key={entry.routeId} className="mr-3">
+                {getRouteTypeLabel(entry.routeType)}:{entry.progress}%
+              </span>
+            ))
+          )}
+        </div>
+      </div>
+
+      {timelineView.mode === 'realtime_day' && timelineView.isPaused && state.phase !== 'settlement' && (
+        <div
+          className="px-4 py-2 text-xs border-b"
+          style={{ borderColor: 'var(--border)', color: 'var(--muted)', background: 'rgba(122,176,212,0.08)' }}
+        >
+          {formatPauseReason(timelineView.pauseReason)}
+        </div>
+      )}
+
+      {slotToast && (
+        <div
+          className="px-4 py-2 text-xs border-b progress-toast"
+          style={{ borderColor: 'var(--border)', color: 'var(--npc-color)', background: 'rgba(122,176,212,0.08)' }}
+        >
+          {slotToast}
+        </div>
+      )}
+
+      {progressToast && (
+        <div
+          className="px-4 py-2 text-xs border-b progress-toast"
+          style={{ borderColor: 'var(--border)', color: 'var(--system-color)', background: 'rgba(212,160,87,0.08)' }}
+        >
+          {progressToast}
+        </div>
+      )}
+
+      {errorText && (
+        <div
+          className="px-4 py-2 text-xs border-b"
+          style={{ borderColor: 'var(--border)', color: 'var(--system-color)', background: 'var(--input-bg)' }}
+        >
+          {errorText}
+        </div>
+      )}
+
+      <div className="flex flex-1 overflow-hidden">
+        <div className="flex-1 flex flex-col min-w-0">
+          <div ref={logRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+            {state.narrativeLog.map((entry, i) => (
+              <div key={`log-${i}`} className="narrative-entry text-sm leading-relaxed whitespace-pre-wrap">
+                {entry.type === 'player' ? (
+                  <div style={{ color: getEntryColor(entry.type) }}>
+                    <span className="font-bold">{getEntryPrefix(entry)}</span>
+                    {entry.content}
+                  </div>
+                ) : (
+                  <div style={{ color: getEntryColor(entry.type) }}>
+                    {entry.speaker && entry.type === 'npc' && (
+                      <span className="font-bold">{getEntryPrefix(entry)}</span>
+                    )}
+                    {entry.content}
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {optimisticEntries.map((entry) => (
+              <div
+                key={entry.id}
+                className={`narrative-entry text-sm leading-relaxed whitespace-pre-wrap optimistic-entry ${entry.status}`}
+              >
+                <div style={{ color: entry.status === 'failed' ? 'var(--system-color)' : getEntryColor(entry.type) }}>
+                  <span className="font-bold">{getEntryPrefix(entry)}</span>
+                  {entry.content}
+                  {entry.status === 'pending' && <span className="optimistic-dots" />}
+                  {entry.status === 'failed' && <span className="ml-2 text-xs">（未生效）</span>}
+                </div>
+              </div>
+            ))}
+
+            {loading && <div className="text-sm cursor-blink" style={{ color: 'var(--muted)' }} />}
+          </div>
+
+          {state.phase !== 'settlement' && !sessionExpired && (
+            <div className="border-t px-4 py-3 shrink-0" style={{ borderColor: 'var(--border)' }}>
+              {pendingActionLabel && (
+                <div
+                  className="mb-2 px-2 py-1 text-xs rounded border pending-status"
+                  style={{ borderColor: 'var(--border)', color: 'var(--system-color)', background: 'rgba(212,160,87,0.08)' }}
+                >
+                  正在处理：{pendingActionLabel}
+                </div>
+              )}
+
+              <div className="flex gap-2 mb-2 flex-wrap">
+                {connectedLocs.map((loc) => (
+                  <button
+                    key={loc.id}
+                    onClick={() => {
+                      void sendAction({ type: 'move', target: loc.id });
+                    }}
+                    disabled={loading}
+                    className="px-2 py-1 text-xs rounded border transition-opacity hover:opacity-80 disabled:opacity-40"
+                    style={{ borderColor: 'var(--border)', color: 'var(--gm-color)' }}
+                  >
+                    去{loc.name}
+                  </button>
+                ))}
+                {npcsHere.map((npc) => (
+                  <button
+                    key={npc.id}
+                    onClick={() => {
+                      setInput(`对${npc.name}说：`);
+                      inputRef.current?.focus();
+                    }}
+                    disabled={loading}
+                    className="px-2 py-1 text-xs rounded border transition-opacity hover:opacity-80 disabled:opacity-40"
+                    style={{ borderColor: 'var(--border)', color: 'var(--npc-color)' }}
+                  >
+                    与{npc.name}交谈
+                  </button>
+                ))}
+                <button
+                  onClick={() => {
+                    void sendAction({ type: 'look' });
+                  }}
+                  disabled={loading}
+                  className="px-2 py-1 text-xs rounded border transition-opacity hover:opacity-80 disabled:opacity-40"
+                  style={{ borderColor: 'var(--border)', color: 'var(--muted)' }}
+                >
+                  环顾四周
+                </button>
+              </div>
+
+              <div className="mb-2 flex flex-wrap items-center gap-2 text-xs" style={{ color: 'var(--muted)' }}>
+                <span style={{ color: 'var(--npc-color)' }}>对话策略</span>
+                <select
+                  value={talkApproach}
+                  onChange={(event) => {
+                    const next = event.target.value as TalkApproach;
+                    setTalkApproach(next);
+                    if (next !== 'present_evidence') {
+                      setPresentedClueId('');
+                    }
+                  }}
+                  disabled={loading}
+                  className="rounded border px-2 py-1 bg-transparent disabled:opacity-40"
+                  style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                >
+                  {TALK_APPROACH_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                {talkApproach === 'present_evidence' && (
+                  <>
+                    <span style={{ color: 'var(--clue-color)' }}>出示线索</span>
+                    <select
+                      value={presentedClueId}
+                      onChange={(event) => setPresentedClueId(event.target.value)}
+                      disabled={loading || presentableClues.length === 0}
+                      className="rounded border px-2 py-1 bg-transparent disabled:opacity-40"
+                      style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                    >
+                      {presentableClues.length === 0 ? (
+                        <option value="">暂无可出示线索</option>
+                      ) : (
+                        presentableClues.map((clue) => (
+                          <option key={clue.id} value={clue.id}>
+                            [{clue.id}] {clue.name}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </>
+                )}
+                <span style={{ color: 'var(--muted)' }}>· {TALK_APPROACH_HINT[talkApproach]}</span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-sm" style={{ color: 'var(--player-color)' }}>&gt;</span>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  disabled={loading}
+                  placeholder={loading ? '处理中...' : '输入行动（对xxx说：/ 去xxx / 搜查xxx / 环顾）'}
+                  className="flex-1 bg-transparent text-sm focus:outline-none disabled:opacity-40"
+                  style={{ color: 'var(--foreground)' }}
+                />
+              </div>
+            </div>
+          )}
+
+          {sessionExpired && (
+            <div className="border-t px-4 py-3 text-xs" style={{ borderColor: 'var(--border)', color: 'var(--muted)' }}>
+              会话已失效。请重新开始新的调查。
+            </div>
+          )}
+        </div>
+
+        <div
+          className="hidden lg:block w-72 border-l overflow-y-auto p-3 shrink-0"
+          style={{ borderColor: 'var(--border)', background: 'rgba(20,20,24,0.75)' }}
+        >
+          <h3 className="text-xs font-bold mb-2" style={{ color: 'var(--npc-color)' }}>
+            当前身份
+          </h3>
+          <div className="rounded border px-3 py-2 mb-4" style={{ borderColor: 'var(--border)', background: 'rgba(122,176,212,0.06)' }}>
+            <div className="text-sm font-bold" style={{ color: 'var(--foreground)' }}>
+              {currentIdentity.title}
+            </div>
+            <div className="text-[11px] mt-1 leading-relaxed" style={{ color: 'var(--muted)' }}>
+              {state.player.identityBrief}
+            </div>
+            <div className="mt-2 text-[11px]" style={{ color: 'var(--player-color)' }}>
+              优势：{identityPresentation.advantages.join('；')}
+            </div>
+            <div className="mt-1 text-[11px]" style={{ color: 'var(--system-color)' }}>
+              代价：{identityPresentation.costs.join('；')}
+            </div>
+            <div className="mt-3">
+              <div className="flex items-center justify-between text-[11px] mb-1" style={{ color: 'var(--muted)' }}>
+                <span>身份风险</span>
+                <span style={{ color: 'var(--system-color)' }}>{identityRisk}</span>
+              </div>
+              <div className="h-1.5 rounded" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                <div
+                  className="h-full rounded progress-fill"
+                  style={{
+                    width: `${identityRiskPercent}%`,
+                    background: identityRiskPercent >= 70 ? 'var(--system-color)' : 'var(--npc-color)',
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {showGovernanceLedger && (
+            <div className="rounded border px-3 py-2 mb-4" style={{ borderColor: 'var(--border)', background: 'rgba(108,188,164,0.08)' }}>
+              <div className="text-xs font-bold mb-2" style={{ color: 'var(--npc-color)' }}>
+                治理指标
+              </div>
+              <div className="space-y-2">
+                {[
+                  { label: '秩序', value: governanceLedger.order, color: 'var(--player-color)' },
+                  { label: '人性', value: governanceLedger.humanity, color: 'var(--system-color)' },
+                  { label: '生存', value: governanceLedger.survival, color: 'var(--clue-color)' },
+                ].map((entry) => (
+                  <div key={entry.label}>
+                    <div className="flex items-center justify-between text-[11px] mb-1" style={{ color: 'var(--muted)' }}>
+                      <span>{entry.label}</span>
+                      <span style={{ color: entry.color }}>{entry.value}</span>
+                    </div>
+                    <div className="h-1.5 rounded" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                      <div
+                        className="h-full rounded progress-fill"
+                        style={{
+                          width: `${clamp(entry.value, 0, 100)}%`,
+                          background: entry.color,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <h3 className="text-xs font-bold mb-3" style={{ color: 'var(--system-color)' }}>
+            结局进度
+          </h3>
+          <div className="space-y-3">
+            {routeProgress.length === 0 ? (
+              <div className="text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
+                还没有锁定任何结局线索。继续调查后，这里才会逐条显示对应路线进度。
+              </div>
+            ) : (
+              routeProgress.map((entry) => (
+                <div
+                  key={entry.routeId}
+                  className={`rounded border px-2 py-2 route-progress-item ${highlightedRouteId === entry.routeId ? 'active' : ''}`}
+                  style={{ borderColor: 'var(--border)' }}
+                >
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span style={{ color: 'var(--foreground)' }}>{getRouteTypeLabel(entry.routeType)}：{entry.routeName}</span>
+                    <span style={{ color: 'var(--system-color)' }}>{entry.progress}%</span>
+                  </div>
+                  <div className="h-1.5 rounded progress-rail" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                    <div
+                      className="h-full rounded progress-fill"
+                      style={{
+                        width: `${entry.progress}%`,
+                        background:
+                          entry.routeType === 'HE'
+                            ? 'var(--player-color)'
+                            : entry.routeType === 'TE'
+                              ? 'var(--npc-color)'
+                              : entry.routeType === 'SE'
+                                ? 'var(--clue-color)'
+                                : 'var(--system-color)',
+                      }}
+                    />
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {showClues && (
+          <div
+            className="w-72 border-l overflow-y-auto p-3 shrink-0"
+            style={{ borderColor: 'var(--border)' }}
+          >
+            <h3 className="text-xs font-bold mb-3" style={{ color: 'var(--clue-color)' }}>
+              已发现线索 ({discoveredClues.length})
+            </h3>
+            {discoveredClues.length === 0 ? (
+              <p className="text-xs" style={{ color: 'var(--muted)' }}>暂无线索</p>
+            ) : (
+              <div className="space-y-3">
+                {discoveredClues.map((clue) => (
+                  <div key={clue.id} className="text-xs">
+                    <div className="font-bold" style={{ color: 'var(--clue-color)' }}>
+                      [{clue.tier}] {clue.name}
+                    </div>
+                    <div className="mt-1 leading-relaxed" style={{ color: 'var(--foreground)' }}>
+                      {clue.description}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {showMap && (
+          <div
+            className="w-72 border-l overflow-y-auto p-3 shrink-0"
+            style={{ borderColor: 'var(--border)' }}
+          >
+            <h3 className="text-xs font-bold mb-3" style={{ color: 'var(--gm-color)' }}>
+              {episode.name}地图
+            </h3>
+            <div className="space-y-2">
+              {episode.locations.map((loc) => {
+                const isCurrent = loc.id === state.currentLocation;
+                const isVisited = state.visitedLocations.includes(loc.id);
+                return (
+                  <div
+                    key={loc.id}
+                    className="text-xs px-2 py-1 rounded"
+                    style={{
+                      background: isCurrent ? 'var(--border)' : 'transparent',
+                      color: isCurrent
+                        ? 'var(--system-color)'
+                        : isVisited
+                          ? 'var(--foreground)'
+                          : 'var(--muted)',
+                    }}
+                  >
+                    {isCurrent ? '▸ ' : '  '}
+                    {loc.name}
+                    {isCurrent ? ' (当前)' : ''}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {showInventory && (
+          <div
+            className="w-64 border-l overflow-y-auto p-3 shrink-0"
+            style={{ borderColor: 'var(--border)', background: 'var(--input-bg)' }}
+          >
+            <h3 className="text-xs font-bold mb-3" style={{ color: 'var(--system-color)' }}>
+              背包
+            </h3>
+            {state.inventory.length === 0 ? (
+              <p className="text-xs" style={{ color: 'var(--muted)' }}>空空如也。</p>
+            ) : (
+              <div className="space-y-2">
+                {state.inventory.map((itemId) => {
+                  const item = episode.items.find((i) => i.id === itemId);
+                  if (!item) return null;
+                  return (
+                    <div key={itemId} className="text-xs p-2 rounded" style={{ background: 'var(--border)' }}>
+                      <div className="font-bold" style={{ color: 'var(--system-color)' }}>
+                        {item.name}
+                      </div>
+                      <div className="mt-1" style={{ color: 'var(--muted)' }}>
+                        {item.description}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {showSubmit && (
+        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: 'rgba(0,0,0,0.8)' }}>
+          <div className="max-w-lg w-full mx-4 p-6 rounded-lg" style={{ background: 'var(--input-bg)', border: '1px solid var(--border)' }}>
+            <h3 className="text-sm font-bold mb-1" style={{ color: 'var(--system-color)' }}>
+              提交推理
+            </h3>
+            <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>
+              请写下你的判断：关键责任人是谁？你依据了哪些事实？你的裁断如何平衡情与法？
+            </p>
+            <textarea
+              value={submitText}
+              onChange={(e) => setSubmitText(e.target.value)}
+              rows={8}
+              className="w-full px-3 py-2 text-sm rounded border focus:outline-none resize-none"
+              style={{ background: 'var(--background)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+              placeholder="我认为关键责任人是……证据包括……我的判决是……"
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                onClick={() => setShowSubmit(false)}
+                className="px-4 py-2 text-xs rounded border transition-opacity hover:opacity-80"
+                style={{ borderColor: 'var(--border)', color: 'var(--muted)' }}
+              >
+                取消
+              </button>
+              <button
+                onClick={() => {
+                  void handleSubmitReasoning();
+                }}
+                disabled={!submitText.trim() || loading}
+                className="px-4 py-2 text-xs rounded font-bold transition-opacity hover:opacity-80 disabled:opacity-40"
+                style={{ background: 'var(--system-color)', color: 'var(--background)' }}
+              >
+                {loading ? '评估中...' : '提交'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

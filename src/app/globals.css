@@ -1,8 +1,16 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0c0c0f;
+  --foreground: #c8c5b8;
+  --gm-color: #a0967a;
+  --npc-color: #7ab0d4;
+  --player-color: #8bc48a;
+  --system-color: #d4a057;
+  --clue-color: #c79ecf;
+  --muted: #5f5c51;
+  --border: #2a2a2e;
+  --input-bg: #141418;
 }
 
 @theme inline {
@@ -12,15 +20,107 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+body {
+  background: radial-gradient(circle at top, #17171c 0%, var(--background) 38%, #0a0a0d 100%);
+  color: var(--foreground);
+  font-family: var(--font-mono), 'Courier New', monospace;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+/* Narrative text animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-body {
-  background: var(--background);
+.narrative-entry {
+  animation: fadeIn 0.26s ease-out;
+}
+
+.optimistic-entry.pending {
+  opacity: 0.78;
+}
+
+.optimistic-entry.failed {
+  opacity: 0.92;
+}
+
+.optimistic-dots::after {
+  content: ' ...';
+  animation: blink 1.1s infinite;
+}
+
+.pending-status::after {
+  content: ' ···';
+  animation: blink 1s infinite;
+}
+
+/* Typing cursor */
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.2;
+  }
+}
+
+.cursor-blink::after {
+  content: '▌';
+  animation: blink 1s infinite;
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+}
+
+@keyframes pulseSoft {
+  0% {
+    box-shadow: 0 0 0 0 rgba(212, 160, 87, 0.38);
+  }
+  100% {
+    box-shadow: 0 0 0 8px rgba(212, 160, 87, 0);
+  }
+}
+
+.route-progress-item.active {
+  border-color: rgba(212, 160, 87, 0.65);
+  animation: pulseSoft 1.2s ease-out;
+}
+
+.progress-fill {
+  transition: width 220ms ease;
+}
+
+.progress-toast {
+  animation: fadeIn 0.2s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .narrative-entry,
+  .progress-toast,
+  .route-progress-item.active {
+    animation: none;
+  }
+
+  .progress-fill {
+    transition: none;
+  }
 }
