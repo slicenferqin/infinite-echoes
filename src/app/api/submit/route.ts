@@ -12,6 +12,19 @@ import { getEpisodePacing, markTimelineSettled } from '@/lib/timeline/pacing';
 import { requireAuth, unauthorizedResponse } from '@/lib/auth/guard';
 import { getUserProgress, recordEpisodeOutcome, upsertUserProgress } from '@/lib/progress/repo';
 import { ensureSocialLedger, refreshNonBeEligibility } from '@/lib/social/audit';
+import { applyEpisodeMetaEffects } from '@/lib/meta-world/effects';
+import {
+  buildMetaWorldSummary,
+  getMetaWorldState,
+  upsertMetaWorldState,
+} from '@/lib/meta-world/repo';
+import { listRecentWorldEvents } from '@/lib/world-events/repo';
+import { generateSettlementArtifacts } from '@/lib/artifacts/generator';
+import { insertArtifacts } from '@/lib/artifacts/repo';
+import { createChronicleEntry } from '@/lib/chronicle/factory';
+import { insertChronicleEntry } from '@/lib/chronicle/repo';
+import { createNovelProject } from '@/lib/novelization/planner';
+import { insertNovelProject } from '@/lib/novelization/repo';
 
 const submitSchema = z.object({
   sessionId: z.string().uuid(),
@@ -123,6 +136,28 @@ function normalizeEvaluation(
   };
 }
 
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+function resolveEmotionalTheme(episode: EpisodeConfig): string {
+  return episode.culturalProfile?.valueCore?.slice(0, 2).join(' / ') || episode.name;
+}
+
+function resolveWoundsLeft(routeType: 'HE' | 'TE' | 'BE' | 'SE'): string[] {
+  switch (routeType) {
+    case 'HE':
+      return ['你保住了一部分人，但代价没有被完全抹平。'];
+    case 'TE':
+      return ['真相更完整了，但一定有人为此付出了现实代价。'];
+    case 'SE':
+      return ['你知道了不能轻易公开的东西，知情本身成了负担。'];
+    case 'BE':
+    default:
+      return ['程序闭合了，但情感与真相都没有真正被安放。'];
+  }
+}
+
 export async function POST(request: Request) {
   const auth = await requireAuth(request);
   if (!auth) {
@@ -192,6 +227,7 @@ export async function POST(request: Request) {
   const fallbackSummary = '评估系统未完整响应，已按保守规则完成结算。';
 
   const currentProgress = getUserProgress(auth.user.id);
+  const currentMetaWorld = getMetaWorldState(auth.user.id);
 
   try {
     if (entry.runtimeHooks?.onBeforeSettlement) {
@@ -368,6 +404,64 @@ ${evaluation.summary}
       auth.user.id,
       applySettlementProgress(currentProgress, state.episodeId, route.type)
     );
+    const nextMetaWorld = upsertMetaWorldState(
+      applyEpisodeMetaEffects({
+        metaWorld: currentMetaWorld,
+        episode,
+        route,
+      })
+    );
+    const worldEvents = listRecentWorldEvents(auth.user.id, sessionId, episode.id, 6);
+    const discoveredClueNames = episode.clues
+      .filter((clue) => state.discoveredClues.includes(clue.id) && !clue.isFalse)
+      .map((clue) => clue.name);
+    const contactedNpcNames = uniqueStrings(
+      (state.socialLedger?.npcContacted ?? [])
+        .map((npcId) => episode.npcs.find((entry) => entry.id === npcId)?.name ?? npcId)
+    );
+    const artifacts = generateSettlementArtifacts({
+      userId: auth.user.id,
+      sessionId,
+      episodeId: episode.id,
+      episodeName: episode.name,
+      route,
+      epilogue: evaluation.summary,
+      discoveredClueNames,
+      contactedNpcNames,
+      worldEventSummaries: worldEvents.map((event) => event.summary),
+    });
+    insertArtifacts(artifacts);
+
+    const chronicleEntry = createChronicleEntry({
+      userId: auth.user.id,
+      episodeId: episode.id,
+      route,
+      episodeName: episode.name,
+      emotionalTheme: resolveEmotionalTheme(episode),
+      majorChoices: state.actionHistory
+        .slice(-5)
+        .map((entry) => [entry.type, entry.target, entry.detail].filter(Boolean).join(' · ')),
+      peopleRemembered: contactedNpcNames,
+      truthsLearned: uniqueStrings([
+        evaluation.summary,
+        ...discoveredClueNames.slice(0, 3).map((name) => `你带出了关于「${name}」的判断。`),
+      ]),
+      woundsLeft: resolveWoundsLeft(route.type),
+      anomaliesWitnessed: uniqueStrings(
+        Object.values(nextMetaWorld.anomalies.tracks)
+          .filter((track) => track.lastSeenEpisodeId === episode.id)
+          .map((track) => track.notes[track.notes.length - 1] ?? track.id)
+      ),
+      artifacts,
+    });
+    insertChronicleEntry(chronicleEntry);
+    const novelProject = createNovelProject({
+      userId: auth.user.id,
+      chronicle: chronicleEntry,
+      episodeName: episode.name,
+      artifacts,
+    });
+    insertNovelProject(novelProject);
 
     recordEpisodeOutcome({
       userId: auth.user.id,
@@ -399,10 +493,36 @@ ${evaluation.summary}
         signalFlags: evaluation.signalFlags,
         nonBeEligible: state.socialLedger?.nonBeEligible ?? true,
         unlockedEpisodes: nextProgress.unlockedEpisodes,
+        anomalyCount: Object.keys(nextMetaWorld.anomalies.tracks).length,
       },
     });
 
-    return NextResponse.json({ state, settlement });
+    return NextResponse.json({
+      state,
+      settlement,
+      metaWorld: buildMetaWorldSummary(nextMetaWorld),
+      artifacts: artifacts.map((artifact) => ({
+        id: artifact.id,
+        kind: artifact.kind,
+        title: artifact.title,
+      })),
+      chronicle: {
+        id: chronicleEntry.id,
+        title: chronicleEntry.title,
+        routeType: chronicleEntry.routeType,
+      },
+      novelProject: {
+        id: novelProject.id,
+        status: novelProject.status,
+        chapterCount: novelProject.targetChapterCount,
+        wordsPerChapter: novelProject.targetWordsPerChapter,
+        previewChapters: novelProject.chapterPlan.slice(0, 3).map((chapter) => ({
+          chapter: chapter.chapter,
+          title: chapter.title,
+          pov: chapter.pov,
+        })),
+      },
+    });
   } catch (error) {
     const errorType = error instanceof LlmError ? error.type : 'unknown';
     logGameTelemetry({

@@ -27,6 +27,32 @@ interface OptimisticEntry extends NarrativeEntry {
   status: 'pending' | 'failed';
 }
 
+interface SettlementArtifactSummary {
+  id: string;
+  kind: string;
+  title: string;
+}
+
+interface SettlementChronicleSummary {
+  id: string;
+  title: string;
+  routeType: string;
+}
+
+interface SettlementNovelPreview {
+  chapter: number;
+  title: string;
+  pov: string;
+}
+
+interface SettlementNovelSummary {
+  id: string;
+  status: string;
+  chapterCount: number;
+  wordsPerChapter: number;
+  previewChapters: SettlementNovelPreview[];
+}
+
 interface TimelineViewModel {
   mode: 'round' | 'realtime_day';
   currentDay: number;
@@ -190,6 +216,9 @@ export default function GameView({
   const [pendingActionLabel, setPendingActionLabel] = useState<string | null>(null);
   const [optimisticEntries, setOptimisticEntries] = useState<OptimisticEntry[]>([]);
   const [settledRouteId, setSettledRouteId] = useState<string | null>(null);
+  const [settlementArtifacts, setSettlementArtifacts] = useState<SettlementArtifactSummary[]>([]);
+  const [settlementChronicle, setSettlementChronicle] = useState<SettlementChronicleSummary | null>(null);
+  const [settlementNovel, setSettlementNovel] = useState<SettlementNovelSummary | null>(null);
   const [routeProgress, setRouteProgress] = useState<RouteProgressSnapshot[]>(() =>
     computeRouteProgress(episodeConfig, initialState)
   );
@@ -634,6 +663,9 @@ export default function GameView({
       const data = (await res.json()) as {
         state?: GameState;
         settlement?: SettlementResult;
+        artifacts?: SettlementArtifactSummary[];
+        chronicle?: SettlementChronicleSummary;
+        novelProject?: SettlementNovelSummary;
       } & ApiFailure;
 
       if (!res.ok) {
@@ -648,6 +680,9 @@ export default function GameView({
 
       if (data.state) setState(data.state);
       setSettledRouteId(data.settlement?.route?.id ?? null);
+      setSettlementArtifacts(data.artifacts ?? []);
+      setSettlementChronicle(data.chronicle ?? null);
+      setSettlementNovel(data.novelProject ?? null);
     } catch (err) {
       console.error('Submit failed:', err);
       setOptimisticEntries((entries) => entries.map((entry) => ({ ...entry, status: 'failed' })));
@@ -866,6 +901,11 @@ export default function GameView({
             ))
           )}
         </div>
+        {state.phase === 'settlement' && settlementArtifacts.length > 0 && (
+          <div>
+            本次沉淀：{settlementArtifacts.slice(0, 2).map((entry) => entry.title).join(' / ')}
+          </div>
+        )}
       </div>
 
       {timelineView.mode === 'realtime_day' && timelineView.isPaused && state.phase !== 'settlement' && (
@@ -1170,6 +1210,69 @@ export default function GameView({
               ))
             )}
           </div>
+
+          {state.phase === 'settlement' && (
+            <div className="mt-5 space-y-4">
+              <div>
+                <h3 className="text-xs font-bold mb-2" style={{ color: 'var(--clue-color)' }}>
+                  本次沉淀
+                </h3>
+                <div className="rounded border px-3 py-2" style={{ borderColor: 'var(--border)', background: 'rgba(199,158,207,0.06)' }}>
+                  {settlementArtifacts.length > 0 ? (
+                    <div className="space-y-2">
+                      {settlementArtifacts.map((entry) => (
+                        <div key={entry.id} className="text-[11px]" style={{ color: 'var(--foreground)' }}>
+                          {entry.kind === 'archive_summary'
+                            ? '档案'
+                            : entry.kind === 'world_bulletin'
+                              ? '日报'
+                              : entry.kind === 'fragment_log'
+                                ? '碎片'
+                                : entry.kind}
+                          ：{entry.title}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-[11px]" style={{ color: 'var(--muted)' }}>
+                      这次结算尚未生成额外沉淀。
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {settlementChronicle && (
+                <div>
+                  <h3 className="text-xs font-bold mb-2" style={{ color: 'var(--player-color)' }}>
+                    主角经历
+                  </h3>
+                  <div className="rounded border px-3 py-2 text-[11px]" style={{ borderColor: 'var(--border)', background: 'rgba(139,196,138,0.06)', color: 'var(--foreground)' }}>
+                    {settlementChronicle.title} · {settlementChronicle.routeType}
+                  </div>
+                </div>
+              )}
+
+              {settlementNovel && (
+                <div>
+                  <h3 className="text-xs font-bold mb-2" style={{ color: 'var(--system-color)' }}>
+                    小说化提纲
+                  </h3>
+                  <div className="rounded border px-3 py-2" style={{ borderColor: 'var(--border)', background: 'rgba(212,160,87,0.06)' }}>
+                    <div className="text-[11px] mb-2" style={{ color: 'var(--muted)' }}>
+                      已生成 {settlementNovel.chapterCount} 章提纲，每章目标约 {settlementNovel.wordsPerChapter} 字。
+                    </div>
+                    <div className="space-y-2">
+                      {settlementNovel.previewChapters.map((chapter) => (
+                        <div key={chapter.chapter} className="text-[11px]" style={{ color: 'var(--foreground)' }}>
+                          第{chapter.chapter}章 · {chapter.title} · 视角：{chapter.pov}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {showClues && (

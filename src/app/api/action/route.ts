@@ -23,6 +23,8 @@ import {
   parseNpcResponse,
   summarizeConversation,
 } from '@/lib/agents/npc';
+import { appendNpcMemoryEntry, getNpcMemoryState } from '@/lib/npc-memory/repo';
+import { selectRelevantNpcMemories } from '@/lib/npc-memory/selectors';
 import { getEpisodeEntry } from '@/lib/episodes/registry';
 import {
   ACTIVE_SESSION_TTL_MS,
@@ -51,6 +53,8 @@ import {
   applyTalkSocialDynamics,
   recoverNpcCooldowns,
 } from '@/lib/social/engine';
+import { simulateWorldEvents } from '@/lib/world-events/engine';
+import { insertWorldEvents } from '@/lib/world-events/repo';
 
 const actionSchema = z.object({
   sessionId: z.string().uuid(),
@@ -166,6 +170,27 @@ function collectNewFlags(
   nextFlags: Record<string, boolean>
 ): string[] {
   return Object.keys(nextFlags).filter((flag) => !!nextFlags[flag] && !previousFlags[flag]);
+}
+
+function compactText(text: string, maxLength = 30): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength)}…`;
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+function getApproachEmotionTag(
+  approach: 'neutral' | 'empathy' | 'pressure' | 'exchange' | 'present_evidence',
+  trustDelta: number
+): string {
+  if (approach === 'pressure') return trustDelta < 0 ? 'threatened' : 'pressured';
+  if (approach === 'empathy') return trustDelta >= 0 ? 'softened' : 'guarded';
+  if (approach === 'exchange') return 'calculating';
+  if (approach === 'present_evidence') return trustDelta >= 0 ? 'shaken' : 'cornered';
+  return trustDelta >= 0 ? 'attentive' : 'guarded';
 }
 
 function applyRuntimeResult(
@@ -412,6 +437,27 @@ export async function POST(request: Request) {
     }
   };
 
+  const applyWorldEventTransitions = (transitions: RuntimeTimeSlotContext[]) => {
+    if (transitions.length === 0) return;
+
+    for (const transition of transitions) {
+      const simulated = simulateWorldEvents({
+        userId: auth.user.id,
+        sessionId,
+        episode,
+        state,
+        context: transition,
+      });
+
+      state = simulated.state;
+      insertWorldEvents(simulated.events);
+
+      for (const note of simulated.notifications) {
+        state = addNarrative(state, 'system', note);
+      }
+    }
+  };
+
   const applySocialMutation = (result: SocialMutationResult) => {
     const beforeFlags = { ...state.flags };
     state = result.state;
@@ -460,6 +506,7 @@ export async function POST(request: Request) {
     const touchedTimeline = touchTimelineActive(state, episode);
     state = touchedTimeline.state;
     applyRuntimeTimeSlotTransitions(touchedTimeline.transitions);
+    applyWorldEventTransitions(touchedTimeline.transitions);
     applySocialMutation(recoverNpcCooldowns(state, episode));
 
     if (touchedTimeline.exhausted) {
@@ -634,7 +681,21 @@ export async function POST(request: Request) {
           }
         }
 
-        const systemPrompt = buildNpcSystemPrompt(npc, tempNpcState, tempState, episode);
+        const npcMemoryState = getNpcMemoryState(auth.user.id, state.episodeId, npc.id);
+        const recalledMemories = selectRelevantNpcMemories(npcMemoryState, {
+          playerInput: action.content,
+          currentLocation: state.currentLocation,
+          presentedClueId: presentedClue?.id,
+          limit: 6,
+        });
+
+        const systemPrompt = buildNpcSystemPrompt(
+          npc,
+          tempNpcState,
+          tempState,
+          episode,
+          recalledMemories.lines
+        );
         const messages = buildNpcMessages(updatedHistory, summary);
 
         let parsedNpc = {
@@ -741,6 +802,126 @@ export async function POST(request: Request) {
           approach: talkApproach,
         });
         applySocialMutation(socialMutation);
+
+        const finalNpcState = state.npcStates[npc.id];
+        const allTalkClueIds = uniqueStrings([
+          ...parsedNpc.clueIds,
+          ...unlocked.unlockedClues,
+        ]);
+        const revealedClueNames = allTalkClueIds
+          .map((clueId) => episode.clues.find((entry) => entry.id === clueId)?.name)
+          .filter((value): value is string => typeof value === 'string');
+        const givenItemNames = parsedNpc.giveItems
+          .map((itemId) => episode.items.find((entry) => entry.id === itemId)?.name)
+          .filter((value): value is string => typeof value === 'string');
+        const significantTalk =
+          Math.abs(parsedNpc.delta) >= 2 ||
+          talkApproach !== 'neutral' ||
+          allTalkClueIds.length > 0 ||
+          parsedNpc.flags.length > 0 ||
+          parsedNpc.giveItems.length > 0 ||
+          finalNpcState?.stance !== npcState.stance;
+
+        if (significantTalk) {
+          const topicSnippet = compactText(action.content, 24);
+          const dialogueSummaryByApproach: Record<typeof talkApproach, string> = {
+            neutral: `那个旅人围着“${topicSnippet}”继续追问过你。`,
+            empathy: `那个旅人先放缓语气，再追问“${topicSnippet}”。`,
+            pressure: `那个旅人曾强逼你就“${topicSnippet}”当场表态。`,
+            exchange: `那个旅人试过拿条件换你就“${topicSnippet}”松口。`,
+            present_evidence: presentedClue
+              ? `那个旅人拿出“${presentedClue.name}”，逼你重看“${topicSnippet}”。`
+              : `那个旅人试图拿并不充分的证据逼你就“${topicSnippet}”改口。`,
+          };
+
+          const baseWeight =
+            4 +
+            (Math.abs(parsedNpc.delta) >= 2 ? 1 : 0) +
+            (allTalkClueIds.length > 0 || parsedNpc.flags.length > 0 || parsedNpc.giveItems.length > 0 ? 2 : 0) +
+            (finalNpcState?.stance !== npcState.stance ? 1 : 0);
+
+          appendNpcMemoryEntry({
+            userId: auth.user.id,
+            episodeId: state.episodeId,
+            ownerNpcId: npc.id,
+            entry: {
+              kind: 'dialogue',
+              aboutPlayer: true,
+              episodeId: state.episodeId,
+              locationId: state.currentLocation,
+              summary: dialogueSummaryByApproach[talkApproach],
+              emotionTag: getApproachEmotionTag(talkApproach, parsedNpc.delta),
+              topicTags: uniqueStrings([
+                talkApproach,
+                npc.id,
+                presentedClue?.id ?? '',
+                presentedClue?.name ?? '',
+                ...allTalkClueIds,
+                ...revealedClueNames,
+              ]),
+              weight: baseWeight,
+              confidence: 0.84,
+              visibility: 'private',
+            },
+          });
+
+          if (allTalkClueIds.length > 0 || parsedNpc.flags.length > 0 || parsedNpc.giveItems.length > 0) {
+            const revealParts = [
+              revealedClueNames.length > 0 ? `你已经对这个旅人松口，提到过${revealedClueNames.join('、')}` : '',
+              parsedNpc.flags.length > 0 ? `还明确放开了${parsedNpc.flags.join('、')}相关口子` : '',
+              givenItemNames.length > 0 ? `并把${givenItemNames.join('、')}交到了他手里` : '',
+            ].filter(Boolean);
+
+            appendNpcMemoryEntry({
+              userId: auth.user.id,
+              episodeId: state.episodeId,
+              ownerNpcId: npc.id,
+              entry: {
+                kind: 'event',
+                aboutPlayer: true,
+                episodeId: state.episodeId,
+                locationId: state.currentLocation,
+                summary: `${revealParts.join('，')}。`,
+                emotionTag: 'revealed',
+                topicTags: uniqueStrings([
+                  ...allTalkClueIds,
+                  ...revealedClueNames,
+                  ...parsedNpc.flags,
+                  ...parsedNpc.giveItems,
+                  ...givenItemNames,
+                ]),
+                weight: Math.max(6, baseWeight + 1),
+                confidence: 0.92,
+                visibility: 'private',
+              },
+            });
+          }
+
+          if (
+            talkApproach === 'pressure' &&
+            (finalNpcState?.stance === 'hostile' ||
+              finalNpcState?.stance === 'guarded' ||
+              parsedNpc.delta < 0)
+          ) {
+            appendNpcMemoryEntry({
+              userId: auth.user.id,
+              episodeId: state.episodeId,
+              ownerNpcId: npc.id,
+              entry: {
+                kind: 'trauma',
+                aboutPlayer: true,
+                episodeId: state.episodeId,
+                locationId: state.currentLocation,
+                summary: `那个旅人曾在“${topicSnippet}”上逼得你下意识收紧了口风。`,
+                emotionTag: 'threatened',
+                topicTags: uniqueStrings([talkApproach, topicSnippet, npc.id]),
+                weight: Math.max(6, baseWeight),
+                confidence: 0.9,
+                visibility: 'private',
+              },
+            });
+          }
+        }
 
         if (!state.flags[`met_${npc.id}`]) {
           setFlag(`met_${npc.id}`);
@@ -916,6 +1097,7 @@ export async function POST(request: Request) {
     );
     state = processedTimeline.state;
     applyRuntimeTimeSlotTransitions(processedTimeline.transitions);
+    applyWorldEventTransitions(processedTimeline.transitions);
     applySocialMutation(recoverNpcCooldowns(state, episode));
     state = refreshNonBeEligibility(episode, state);
 

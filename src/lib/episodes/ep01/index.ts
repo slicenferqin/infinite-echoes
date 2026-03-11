@@ -203,6 +203,60 @@ export const episode01: EpisodeConfig = {
   metaNarrativeHooks: {
     postSettlement: ['回响柱发出低沉的嗡鸣。比之前……似乎更响了一些。'],
   },
+  metaStateEffects: [
+    {
+      whenRouteTypes: ['HE', 'TE', 'SE'],
+      anomalyDeltas: [
+        {
+          id: 'pillar_emotion_resonance',
+          delta: 1,
+          note: '铁匠铺审判结束后，回响柱第一次对玩家情绪波动产生明确回应。',
+        },
+      ],
+      cognitionDeltas: [
+        { id: 'understands_pillars_feed_on_emotion', level: 1 },
+      ],
+      persistentNpcDeltas: [
+        {
+          npcId: 'aji',
+          trustDelta: 4,
+          revealTopics: ['pillar_resonance'],
+          memorySummaryAppend: '他注意到你第一次亲历回响柱的异常共鸣。',
+        },
+      ],
+      archiveEntry: {
+        title: '鸦石村审判记录',
+        summary: '你第一次在副本结算后明确观察到回响柱会对强烈情绪作出回应。',
+        learnedTruths: ['审判并不只是裁断真相，情绪本身也在被某种结构记录。'],
+      },
+    },
+    {
+      whenRouteTypes: ['BE'],
+      anomalyDeltas: [
+        {
+          id: 'pillar_emotion_resonance',
+          delta: 1,
+          note: '即便翻案失败，回响柱仍对未能化解的情绪余震作出反应。',
+        },
+      ],
+      cognitionDeltas: [
+        { id: 'understands_pillars_feed_on_emotion', level: 1 },
+      ],
+      persistentNpcDeltas: [
+        {
+          npcId: 'aji',
+          trustDelta: 2,
+          suspicionDelta: 1,
+          memorySummaryAppend: '他看见你第一次带着失败与余震走出副本。',
+        },
+      ],
+      archiveEntry: {
+        title: '鸦石村未尽记录',
+        summary: '你没能改变结局，但回响柱对情绪残响的反应依旧被你记住。',
+        learnedTruths: ['即使失败，情绪也会被某种力量收走。'],
+      },
+    },
+  ],
   evaluation: {
     truthReference: `### 第一层：表面事实
 铁匠汉克没有杀行商费恩。他半夜听到动静出门，发现费恩已经倒在血泊中，试图拔刀救人因此沾了满手血。

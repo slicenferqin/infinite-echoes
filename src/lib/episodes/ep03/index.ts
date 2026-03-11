@@ -257,6 +257,70 @@ export const episode03: EpisodeConfig = {
       '回响柱最深处传来回音：第八层的门，已经在震动。',
     ],
   },
+  metaStateEffects: [
+    {
+      whenRouteTypes: ['HE', 'TE', 'SE'],
+      unlockHubAreas: ['archive_annex', 'pillar07_perimeter'],
+      anomalyDeltas: [
+        {
+          id: 'public_private_record_split',
+          delta: 2,
+          note: '第七层配给城让你第一次拿到公开记录与策略记录分裂的成体系证据。',
+          confirm: true,
+        },
+      ],
+      cognitionDeltas: [
+        { id: 'recognizes_records_are_rewritten', level: 2 },
+        { id: 'understands_public_vs_hidden_versions', level: 2 },
+        { id: 'suspects_maintainer_layer_exists', level: 1 },
+      ],
+      persistentNpcDeltas: [
+        {
+          npcId: 'aji',
+          trustDelta: 10,
+          revealTopics: ['maintainer_layer', 'split_records'],
+          addTags: ['owes_you_answer'],
+          memorySummaryAppend: '他已经无法再把你挡在回响维护层之外。',
+        },
+      ],
+      archiveEntry: {
+        title: '第七层配给城分层档案',
+        summary: '你正式接触到公开版本与策略版本并行存在的证据，主线认知发生跃迁。',
+        learnedTruths: [
+          '记录不只会被改写，而且可能同时存在公开版与隐藏版。',
+          '阿寂背后很可能存在一层负责维护与筛选真相的结构。',
+        ],
+      },
+    },
+    {
+      whenRouteTypes: ['BE'],
+      unlockHubAreas: ['archive_annex'],
+      anomalyDeltas: [
+        {
+          id: 'public_private_record_split',
+          delta: 1,
+          note: '即便你接受了最低阻力结论，分层记录的裂缝依然被你看见了一角。',
+        },
+      ],
+      cognitionDeltas: [
+        { id: 'recognizes_records_are_rewritten', level: 2 },
+        { id: 'understands_public_vs_hidden_versions', level: 1 },
+      ],
+      persistentNpcDeltas: [
+        {
+          npcId: 'aji',
+          trustDelta: 5,
+          suspicionDelta: 2,
+          memorySummaryAppend: '他知道你已经看见了系统不能轻易解释的裂口。',
+        },
+      ],
+      archiveEntry: {
+        title: '第七层闭合记录',
+        summary: '你接受了程序闭合，但分层记录的存在已经无法再被完全抹去。',
+        learnedTruths: ['被隐藏的版本，未必会因为你低头就消失。'],
+      },
+    },
+  ],
   evaluation: {
     truthReference: `### 第一层：表层事实
 余岚被系统降级，孩子药配中断，家庭确实进入生存危机。

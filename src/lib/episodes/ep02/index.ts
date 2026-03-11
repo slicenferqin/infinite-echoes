@@ -177,6 +177,62 @@ export const episode02: EpisodeConfig = {
       '回响柱忽然发出一声比以往更尖的异响，像是某段记录被强行改写。',
     ],
   },
+  metaStateEffects: [
+    {
+      whenRouteTypes: ['HE', 'TE', 'SE'],
+      anomalyDeltas: [
+        {
+          id: 'record_rewrite_noise',
+          delta: 1,
+          note: '回执与编号异常让你第一次怀疑，某些结局在公开前就被修过。',
+          confirm: false,
+        },
+      ],
+      cognitionDeltas: [
+        { id: 'recognizes_records_are_rewritten', level: 1 },
+      ],
+      persistentNpcDeltas: [
+        {
+          npcId: 'aji',
+          trustDelta: 6,
+          revealTopics: ['rewritten_endings'],
+          addTags: ['takes_you_seriously'],
+          memorySummaryAppend: '他开始把你视为能真正看见记录裂缝的人。',
+        },
+      ],
+      archiveEntry: {
+        title: '边港回执异常档案',
+        summary: '你带回了关于同编号回执与记录异响的第一批明确证据。',
+        learnedTruths: ['有些结局在公开之前，可能已经被谁改写过。'],
+      },
+    },
+    {
+      whenRouteTypes: ['BE'],
+      anomalyDeltas: [
+        {
+          id: 'record_rewrite_noise',
+          delta: 1,
+          note: '程序照常闭环，但异响反而更像有人在暗处修正结果。',
+        },
+      ],
+      cognitionDeltas: [
+        { id: 'recognizes_records_are_rewritten', level: 1 },
+      ],
+      persistentNpcDeltas: [
+        {
+          npcId: 'aji',
+          trustDelta: 3,
+          suspicionDelta: 1,
+          memorySummaryAppend: '他看见你开始怀疑结局本身是否可靠。',
+        },
+      ],
+      archiveEntry: {
+        title: '边港程序定性残卷',
+        summary: '即便你按程序完成裁断，记录层的不协调感依然没有消失。',
+        learnedTruths: ['程序正确，不代表记录真实。'],
+      },
+    },
+  ],
   evaluation: {
     truthReference: `### 第一层：表层事实
 莉娜确实延迟了回执，形式上违规成立。

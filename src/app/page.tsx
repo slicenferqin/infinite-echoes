@@ -8,6 +8,7 @@ import {
   EpisodeConfig,
   EpisodeSummary,
   GameState,
+  MetaWorldSummary,
 } from '@/lib/types';
 
 const fallbackEpisode: EpisodeSummary = {
@@ -31,6 +32,23 @@ interface ViewerSessionPayload {
     unlockedEpisodes: string[];
     passedEpisodes: string[];
   };
+  metaWorld?: MetaWorldSummary;
+  recentArtifacts?: Array<{
+    id: string;
+    episodeId: string;
+    routeId: string;
+    kind: string;
+    title: string;
+    createdAt: number;
+  }>;
+  recentChronicles?: Array<{
+    id: string;
+    episodeId: string;
+    routeId: string;
+    routeType: string;
+    title: string;
+    createdAt: number;
+  }>;
   error?: string;
 }
 
@@ -42,6 +60,9 @@ export default function Home() {
   const [user, setUser] = useState<ViewerUser | null>(null);
   const [activeSession, setActiveSession] = useState<ActiveSessionMeta | null>(null);
   const [progress, setProgress] = useState<{ unlockedEpisodes: string[]; passedEpisodes: string[] } | null>(null);
+  const [metaWorld, setMetaWorld] = useState<MetaWorldSummary | null>(null);
+  const [recentArtifacts, setRecentArtifacts] = useState<ViewerSessionPayload['recentArtifacts']>([]);
+  const [recentChronicles, setRecentChronicles] = useState<ViewerSessionPayload['recentChronicles']>([]);
 
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authUsername, setAuthUsername] = useState('');
@@ -144,6 +165,9 @@ export default function Home() {
         setUser(null);
         setActiveSession(null);
         setProgress(null);
+        setMetaWorld(null);
+        setRecentArtifacts([]);
+        setRecentChronicles([]);
         setEpisodes([]);
         return;
       }
@@ -152,6 +176,9 @@ export default function Home() {
         setUser(null);
         setActiveSession(null);
         setProgress(null);
+        setMetaWorld(null);
+        setRecentArtifacts([]);
+        setRecentChronicles([]);
         setEpisodes([]);
         return;
       }
@@ -159,11 +186,17 @@ export default function Home() {
       setUser(data.user);
       setActiveSession(data.activeSession ?? null);
       setProgress(data.progress ?? null);
+      setMetaWorld(data.metaWorld ?? null);
+      setRecentArtifacts(data.recentArtifacts ?? []);
+      setRecentChronicles(data.recentChronicles ?? []);
     } catch (error) {
       console.error('Failed to load auth session:', error);
       setUser(null);
       setActiveSession(null);
       setProgress(null);
+      setMetaWorld(null);
+      setRecentArtifacts([]);
+      setRecentChronicles([]);
       setEpisodes([]);
     } finally {
       setAuthLoading(false);
@@ -228,6 +261,9 @@ export default function Home() {
     setUser(null);
     setActiveSession(null);
     setProgress(null);
+    setMetaWorld(null);
+    setRecentArtifacts([]);
+    setRecentChronicles([]);
     setEpisodes([]);
     setGameState(null);
     setSessionId(null);
@@ -470,6 +506,98 @@ export default function Home() {
               已通过副本：{progress.passedEpisodes.length} ｜ 已解锁副本：{progress.unlockedEpisodes.length}
             </div>
           )}
+
+          {metaWorld && (
+            <div className="rounded border p-3" style={{ borderColor: 'var(--border)', background: 'rgba(212,160,87,0.06)' }}>
+              <div className="text-xs font-bold mb-2" style={{ color: 'var(--system-color)' }}>
+                回响之间近况
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <div className="text-[11px] mb-1" style={{ color: 'var(--muted)' }}>常驻角色</div>
+                  <div className="space-y-1">
+                    {metaWorld.npcRelations.length > 0 ? metaWorld.npcRelations.map((entry) => (
+                      <div key={entry.id} className="text-xs" style={{ color: 'var(--foreground)' }}>
+                        {entry.label} · 信任 {entry.trust ?? 0} / 戒心 {entry.suspicion ?? 0}
+                      </div>
+                    )) : (
+                      <div className="text-xs" style={{ color: 'var(--muted)' }}>还未形成稳定关系。</div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-[11px] mb-1" style={{ color: 'var(--muted)' }}>异常观测</div>
+                  <div className="space-y-1">
+                    {metaWorld.anomalyHighlights.length > 0 ? metaWorld.anomalyHighlights.map((entry) => (
+                      <div key={entry.id} className="text-xs" style={{ color: 'var(--foreground)' }}>
+                        {entry.label} · 强度 {entry.level ?? 0}{entry.confirmed ? ' · 已确认' : ''}
+                      </div>
+                    )) : (
+                      <div className="text-xs" style={{ color: 'var(--muted)' }}>尚无明确异常。</div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-[11px] mb-1" style={{ color: 'var(--muted)' }}>主线认知</div>
+                  <div className="space-y-1">
+                    {metaWorld.cognitionHighlights.length > 0 ? metaWorld.cognitionHighlights.map((entry) => (
+                      <div key={entry.id} className="text-xs" style={{ color: 'var(--foreground)' }}>
+                        {entry.label} · 层级 {entry.level ?? 0}/3
+                      </div>
+                    )) : (
+                      <div className="text-xs" style={{ color: 'var(--muted)' }}>你仍停留在表层解释。</div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-[11px] mb-1" style={{ color: 'var(--muted)' }}>最新档案</div>
+                  <div className="space-y-1">
+                    {metaWorld.recentArchives.length > 0 ? metaWorld.recentArchives.map((entry) => (
+                      <div key={entry.id} className="text-xs" style={{ color: 'var(--foreground)' }}>
+                        {entry.label} · {entry.episodeId} / {entry.routeType}
+                      </div>
+                    )) : (
+                      <div className="text-xs" style={{ color: 'var(--muted)' }}>档案馆还没有你的正式记录。</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="text-[11px] mt-2" style={{ color: 'var(--muted)' }}>
+                已开放区域：{metaWorld.unlockedHubAreas.length > 0 ? metaWorld.unlockedHubAreas.join(' / ') : '无'}
+              </div>
+            </div>
+          )}
+
+          {(recentArtifacts?.length || recentChronicles?.length) ? (
+            <div className="rounded border p-3" style={{ borderColor: 'var(--border)', background: 'rgba(122,176,212,0.06)' }}>
+              <div className="text-xs font-bold mb-2" style={{ color: 'var(--npc-color)' }}>
+                最近沉淀
+              </div>
+              {recentChronicles && recentChronicles.length > 0 && (
+                <div className="mb-2">
+                  <div className="text-[11px] mb-1" style={{ color: 'var(--muted)' }}>主角经历</div>
+                  {recentChronicles.slice(0, 2).map((entry) => (
+                    <div key={entry.id} className="text-xs" style={{ color: 'var(--foreground)' }}>
+                      {entry.title} · {entry.routeType}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {recentArtifacts && recentArtifacts.length > 0 && (
+                <div>
+                  <div className="text-[11px] mb-1" style={{ color: 'var(--muted)' }}>档案与碎片</div>
+                  {recentArtifacts.slice(0, 3).map((entry) => (
+                    <div key={entry.id} className="text-xs" style={{ color: 'var(--foreground)' }}>
+                      {entry.title}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : null}
 
           {loadError && (
             <div

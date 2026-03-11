@@ -98,10 +98,122 @@ export interface GovernanceLedger {
   survival: number;
 }
 
+export interface PersistentNpcState {
+  npcId: string;
+  trust: number;
+  suspicion: number;
+  affinityTags: string[];
+  revealedTopics: string[];
+  memorySummary: string;
+  lastEpisodeId?: string;
+  lastUpdatedAt: number;
+}
+
+export interface ArchiveEntry {
+  id: string;
+  episodeId: string;
+  routeId: string;
+  routeType: RouteDefinition['type'];
+  title: string;
+  summary: string;
+  learnedTruths: string[];
+  unlockedAt: number;
+}
+
+export interface ArchiveLedgerState {
+  entries: ArchiveEntry[];
+  unlockedEpisodeIds: string[];
+}
+
+export interface AnomalyTrack {
+  id: string;
+  level: number;
+  firstSeenEpisodeId: string;
+  lastSeenEpisodeId: string;
+  notes: string[];
+  confirmed: boolean;
+}
+
+export interface AnomalyLedgerState {
+  tracks: Record<string, AnomalyTrack>;
+}
+
+export interface CognitionNodeState {
+  id: string;
+  level: 0 | 1 | 2 | 3;
+  sourceEpisodeIds: string[];
+  lastUpdatedAt: number;
+}
+
+export interface PlayerCognitionState {
+  nodes: Record<string, CognitionNodeState>;
+}
+
+export interface MetaWorldState {
+  userId: string;
+  version: number;
+  updatedAt: number;
+  worldFlags: Record<string, boolean>;
+  unlockedHubAreas: string[];
+  persistentNpcStates: Record<string, PersistentNpcState>;
+  archive: ArchiveLedgerState;
+  anomalies: AnomalyLedgerState;
+  cognition: PlayerCognitionState;
+}
+
+export interface MetaWorldSummaryItem {
+  id: string;
+  label: string;
+  level?: number;
+  confirmed?: boolean;
+  trust?: number;
+  suspicion?: number;
+  episodeId?: string;
+  routeType?: RouteDefinition['type'];
+}
+
+export interface MetaWorldSummary {
+  unlockedHubAreas: string[];
+  npcRelations: MetaWorldSummaryItem[];
+  anomalyHighlights: MetaWorldSummaryItem[];
+  cognitionHighlights: MetaWorldSummaryItem[];
+  recentArchives: MetaWorldSummaryItem[];
+}
+
 export interface RouteGovernanceCondition {
   orderMin?: number;
   humanityMin?: number;
   survivalMin?: number;
+}
+
+export interface EpisodeMetaEffectRule {
+  whenRouteIds?: string[];
+  whenRouteTypes?: Array<RouteDefinition['type']>;
+  setWorldFlags?: string[];
+  unlockHubAreas?: string[];
+  anomalyDeltas?: Array<{
+    id: string;
+    delta: number;
+    note: string;
+    confirm?: boolean;
+  }>;
+  cognitionDeltas?: Array<{
+    id: string;
+    level: 0 | 1 | 2 | 3;
+  }>;
+  persistentNpcDeltas?: Array<{
+    npcId: string;
+    trustDelta?: number;
+    suspicionDelta?: number;
+    addTags?: string[];
+    revealTopics?: string[];
+    memorySummaryAppend?: string;
+  }>;
+  archiveEntry?: {
+    title: string;
+    summary: string;
+    learnedTruths: string[];
+  };
 }
 
 export interface EpisodeConfig {
@@ -125,6 +237,7 @@ export interface EpisodeConfig {
   canonicalFacts?: string[]; // immutable lore facts that agents must not contradict
   culturalProfile?: CulturalProfile;
   metaNarrativeHooks?: EpisodeMetaNarrativeHooks;
+  metaStateEffects?: EpisodeMetaEffectRule[];
   evaluation: EpisodeEvaluationConfig;
   openingNarrative: string;
   taskBriefing: string;
