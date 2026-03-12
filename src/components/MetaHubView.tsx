@@ -20,12 +20,19 @@ interface AjiMessage {
   content: string;
 }
 
-interface AjiRelationUpdate {
+interface CounselorRelationUpdate {
   trustDelta: number;
   suspicionDelta: number;
   addedTags: string[];
   revealedTopics: string[];
 }
+
+const COUNSELOR_OPENINGS: Record<string, string> = {
+  aji: '你终于肯停下来看看这些回响留下的东西了。先别急着进下一扇门，读读它们。',
+  linlu: '你每次从门里回来，身上都像多带了一层灰。先坐下吧，你要是愿意，我陪你把它理顺。',
+  laozhao: '别站着发愣。你既然回来了，就先想想下一步先保什么、再查什么，这地方最怕人乱。',
+  hooded_figure: '你还是走到这里了。别问我是谁，先问你自己，为什么总能走到这些门前。',
+};
 
 function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleString('zh-CN', {
@@ -44,12 +51,13 @@ export default function MetaHubView() {
   const [ajiInput, setAjiInput] = useState('');
   const [ajiLoading, setAjiLoading] = useState(false);
   const [ajiRelationHint, setAjiRelationHint] = useState<string | null>(null);
-  const [ajiMessages, setAjiMessages] = useState<AjiMessage[]>([
-    {
-      role: 'aji',
-      content: '你终于肯停下来看看这些回响留下的东西了。先别急着进下一扇门，读读它们。',
-    },
-  ]);
+  const [selectedNpcId, setSelectedNpcId] = useState<string>('aji');
+  const [ajiMessages, setAjiMessages] = useState<Record<string, AjiMessage[]>>({
+    aji: [{ role: 'aji', content: COUNSELOR_OPENINGS.aji }],
+    linlu: [{ role: 'aji', content: COUNSELOR_OPENINGS.linlu }],
+    laozhao: [{ role: 'aji', content: COUNSELOR_OPENINGS.laozhao }],
+    hooded_figure: [{ role: 'aji', content: COUNSELOR_OPENINGS.hooded_figure }],
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -107,6 +115,11 @@ export default function MetaHubView() {
   const archiveCount = hub?.archiveEntries.length ?? 0;
   const anomalyCount = hub?.anomalies.filter((item) => item.level > 0).length ?? 0;
   const chronicleCount = hub?.recentChronicles.length ?? 0;
+  const selectedNpc = useMemo(
+    () => hub?.persistentNpcs.find((npc) => npc.id === selectedNpcId) ?? null,
+    [hub, selectedNpcId]
+  );
+  const visibleMessages = ajiMessages[selectedNpcId] ?? [];
 
   const topAnomaly = useMemo(() => hub?.anomalies[0] ?? null, [hub]);
 
@@ -115,25 +128,33 @@ export default function MetaHubView() {
     if (!message || ajiLoading) return;
 
     setAjiLoading(true);
-    setAjiMessages((entries) => [...entries, { role: 'player', content: message }]);
+    setAjiMessages((entries) => ({
+      ...entries,
+      [selectedNpcId]: [...(entries[selectedNpcId] ?? []), { role: 'player', content: message }],
+    }));
     setAjiInput('');
 
     try {
-      const response = await fetch('/api/meta-world/aji', {
+      const response = await fetch(`/api/meta-world/npc/${selectedNpcId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message }),
       });
 
       const data = (await response.json()) as {
+        npcId?: string;
         reply?: string;
         error?: string;
         hub?: MetaWorldHubPayload;
-        relationUpdate?: AjiRelationUpdate;
+        relationUpdate?: CounselorRelationUpdate;
       };
       const reply = data.reply?.trim() || '……阿寂沉默了片刻，没有把话说死。';
 
-      setAjiMessages((entries) => [...entries, { role: 'aji', content: reply }]);
+      const npcId = data.npcId ?? selectedNpcId;
+      setAjiMessages((entries) => ({
+        ...entries,
+        [npcId]: [...(entries[npcId] ?? []), { role: 'aji', content: reply }],
+      }));
       if (data.hub) {
         setHub(data.hub);
       }
@@ -153,16 +174,22 @@ export default function MetaHubView() {
         if (relation.addedTags.length > 0) {
           parts.push(`关系标签：${relation.addedTags.join(' / ')}`);
         }
-        setAjiRelationHint(parts.length > 0 ? `阿寂的态度发生变化：${parts.join(' · ')}` : null);
+        const npcLabel = data.hub?.persistentNpcs.find((npc) => npc.id === npcId)?.label
+          ?? selectedNpc?.label
+          ?? '这个人';
+        setAjiRelationHint(parts.length > 0 ? `${npcLabel}的态度发生变化：${parts.join(' · ')}` : null);
       } else {
         setAjiRelationHint(null);
       }
     } catch (requestError) {
       console.error('Failed to ask Aji:', requestError);
-      setAjiMessages((entries) => [
+      setAjiMessages((entries) => ({
         ...entries,
-        { role: 'aji', content: '先记下你的问题。这里的回声一乱，我也不想说废话。' },
-      ]);
+        [selectedNpcId]: [
+          ...(entries[selectedNpcId] ?? []),
+          { role: 'aji', content: '先记下你的问题。这里的回声一乱，我也不想说废话。' },
+        ],
+      }));
       setAjiRelationHint(null);
     } finally {
       setAjiLoading(false);
@@ -375,7 +402,7 @@ export default function MetaHubView() {
                 阿寂
               </h2>
               <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
-                {ajiMessages.map((message, index) => (
+                {visibleMessages.map((message, index) => (
                   <div
                     key={`${message.role}-${index}`}
                     className="rounded-xl px-3 py-2 text-sm leading-relaxed"
@@ -386,10 +413,29 @@ export default function MetaHubView() {
                     }}
                   >
                     <div className="text-[11px] mb-1" style={{ color: message.role === 'aji' ? 'var(--npc-color)' : 'var(--system-color)' }}>
-                      {message.role === 'aji' ? '阿寂' : '你'}
+                      {message.role === 'aji' ? (selectedNpc?.label ?? '常驻角色') : '你'}
                     </div>
                     {message.content}
                   </div>
+                ))}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {hub.persistentNpcs.map((npc) => (
+                  <button
+                    key={npc.id}
+                    onClick={() => {
+                      setSelectedNpcId(npc.id);
+                      setAjiRelationHint(null);
+                    }}
+                    className="rounded-full px-3 py-1 text-xs border transition-opacity hover:opacity-85"
+                    style={{
+                      borderColor: selectedNpcId === npc.id ? 'var(--npc-color)' : 'var(--border)',
+                      color: selectedNpcId === npc.id ? 'var(--npc-color)' : 'var(--muted)',
+                      background: selectedNpcId === npc.id ? 'rgba(122,176,212,0.08)' : 'transparent',
+                    }}
+                  >
+                    {npc.label}
+                  </button>
                 ))}
               </div>
               <div className="mt-4 flex gap-2">
@@ -402,7 +448,7 @@ export default function MetaHubView() {
                       void askAji();
                     }
                   }}
-                  placeholder="问阿寂：这些异常说明了什么？"
+                  placeholder={`问${selectedNpc?.label ?? '常驻角色'}：这些异常说明了什么？`}
                   className="flex-1 rounded-xl border px-3 py-2 text-sm focus:outline-none"
                   style={{ borderColor: 'var(--border)', background: 'var(--background)', color: 'var(--foreground)' }}
                 />
