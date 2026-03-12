@@ -14,6 +14,10 @@ export interface WorldEventEffects {
   npcMoodChanges?: Record<string, string>;
   flagChanges?: string[];
   fragmentSeeds?: string[];
+  publicHeatDelta?: number;
+  evidenceDecayDelta?: number;
+  rumorDeltas?: Record<string, number>;
+  locationPressureDeltas?: Record<string, number>;
 }
 
 export interface WorldEventLog {

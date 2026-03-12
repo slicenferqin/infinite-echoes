@@ -275,6 +275,13 @@ export default function GameView({
     humanity: 50,
     survival: 50,
   };
+  const worldPressure = state.worldPressure ?? {
+    publicHeat: 0,
+    evidenceDecay: 0,
+    rumorByNpc: {},
+    locationPressure: {},
+  };
+  const currentLocationPressure = worldPressure.locationPressure[state.currentLocation] ?? 0;
   const showGovernanceLedger = episode.id === 'ep03';
 
   useEffect(() => {
@@ -891,6 +898,9 @@ export default function GameView({
           </div>
         )}
         <div>
+          世界压力：舆论 {worldPressure.publicHeat} · 证据流失 {worldPressure.evidenceDecay} · 当前地点 {currentLocationPressure}
+        </div>
+        <div>
           {routeProgress.length === 0 ? (
             <span>尚未锁定结局线索</span>
           ) : (
@@ -1170,6 +1180,38 @@ export default function GameView({
               </div>
             </div>
           )}
+
+          <div className="rounded border px-3 py-2 mb-4" style={{ borderColor: 'var(--border)', background: 'rgba(212,160,87,0.08)' }}>
+            <div className="text-xs font-bold mb-2" style={{ color: 'var(--system-color)' }}>
+              世界压力
+            </div>
+            <div className="space-y-2">
+              {[
+                { label: '舆论热度', value: worldPressure.publicHeat, color: 'var(--system-color)' },
+                { label: '证据流失', value: worldPressure.evidenceDecay, color: 'var(--clue-color)' },
+                { label: '当前地点压力', value: currentLocationPressure * 16.6, color: 'var(--npc-color)' },
+              ].map((entry) => (
+                <div key={entry.label}>
+                  <div className="flex items-center justify-between text-[11px] mb-1" style={{ color: 'var(--muted)' }}>
+                    <span>{entry.label}</span>
+                    <span style={{ color: entry.color }}>{Math.round(entry.value)}</span>
+                  </div>
+                  <div className="h-1.5 rounded" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                    <div
+                      className="h-full rounded progress-fill"
+                      style={{
+                        width: `${clamp(entry.value, 0, 100)}%`,
+                        background: entry.color,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 text-[11px]" style={{ color: 'var(--muted)' }}>
+              压力升高后，NPC 会更保守，高阶物证也更容易只剩残片。
+            </div>
+          </div>
 
           <h3 className="text-xs font-bold mb-3" style={{ color: 'var(--system-color)' }}>
             结局进度

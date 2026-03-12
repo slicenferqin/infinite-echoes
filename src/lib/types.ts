@@ -98,6 +98,13 @@ export interface GovernanceLedger {
   survival: number;
 }
 
+export interface WorldPressureState {
+  publicHeat: number;
+  evidenceDecay: number;
+  rumorByNpc: Record<string, number>;
+  locationPressure: Record<string, number>;
+}
+
 export interface PersistentNpcState {
   npcId: string;
   trust: number;
@@ -516,6 +523,7 @@ export interface GameState {
   actionHistory: ActionRecord[];
   socialLedger: SocialLedgerState;
   governanceLedger?: GovernanceLedger;
+  worldPressure?: WorldPressureState;
 }
 
 export interface PlayerState {

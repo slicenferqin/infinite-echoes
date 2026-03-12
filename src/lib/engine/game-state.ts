@@ -4,6 +4,7 @@ import {
   IdentityDefinition,
   NarrativeEntry,
   NpcState,
+  WorldPressureState,
 } from '../types';
 import {
   createLegacyIdentity,
@@ -14,6 +15,26 @@ import {
   getEpisodePacing,
   isTimelineExpired,
 } from '../timeline/pacing';
+
+function createInitialWorldPressure(): WorldPressureState {
+  return {
+    publicHeat: 0,
+    evidenceDecay: 0,
+    rumorByNpc: {},
+    locationPressure: {},
+  };
+}
+
+export function ensureWorldPressure(state: GameState): GameState {
+  if (state.worldPressure) {
+    return state;
+  }
+
+  return {
+    ...state,
+    worldPressure: createInitialWorldPressure(),
+  };
+}
 
 export function createInitialState(
   episode: EpisodeConfig,
@@ -79,6 +100,7 @@ export function createInitialState(
       humanity: 50,
       survival: 50,
     },
+    worldPressure: createInitialWorldPressure(),
   };
 }
 

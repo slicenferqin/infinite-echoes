@@ -179,9 +179,20 @@ export function applyTalkSocialDynamics(
     approach === 'present_evidence' &&
     !!action.presentedClueId &&
     ensured.discoveredClues.includes(action.presentedClueId);
+  const worldPressure = ensured.worldPressure ?? {
+    publicHeat: 0,
+    evidenceDecay: 0,
+    rumorByNpc: {},
+    locationPressure: {},
+  };
+  const rumorPressure = worldPressure.rumorByNpc[npcId] ?? 0;
+  const locationPressure = worldPressure.locationPressure[ensured.currentLocation] ?? 0;
 
   const threatDelta =
-    adjustThreatByApproach(approach, hasValidEvidence) + identityBias.threatDelta;
+    adjustThreatByApproach(approach, hasValidEvidence) +
+    identityBias.threatDelta +
+    rumorPressure +
+    (locationPressure >= 3 ? 2 : 0);
   const nextThreat = clamp(npcState.threat + threatDelta, 0, 100);
   const nextStance = stanceFromThreat(nextThreat);
 
@@ -248,12 +259,21 @@ export function applyTalkSocialDynamics(
   }
 
   const trustBonus =
-    adjustTrustBonus(approach, hasValidEvidence) + identityBias.trustDelta;
+    adjustTrustBonus(approach, hasValidEvidence) +
+    identityBias.trustDelta -
+    Math.floor(rumorPressure / 2) -
+    (locationPressure >= 4 ? 1 : 0);
   if (trustBonus !== 0) {
     ensured = setNpcState(ensured, npcId, (entry) => ({
       ...entry,
       trust: clamp(entry.trust + trustBonus, 0, 100),
     }));
+  }
+
+  if (rumorPressure >= 2 || locationPressure >= 3) {
+    notifications.push(
+      `${npc.name}明显受了外头口风影响，说话比之前更谨慎。再不尽快稳住局面，很多人会越来越倾向先保自己。`
+    );
   }
 
   const riskDelta = computeIdentityRiskDelta(

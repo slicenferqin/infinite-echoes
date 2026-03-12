@@ -68,6 +68,45 @@ export function evaluateSearchAccess(
   item: SearchableItem
 ): SearchAccessResult {
   const ensured = ensureSocialLedger(state);
+  const pressure = ensured.worldPressure ?? {
+    publicHeat: 0,
+    evidenceDecay: 0,
+    rumorByNpc: {},
+    locationPressure: {},
+  };
+  const currentLocationPressure = pressure.locationPressure[ensured.currentLocation] ?? 0;
+  const clue = item.clueId ? episode.clues.find((entry) => entry.id === item.clueId) : null;
+
+  if (
+    clue &&
+    !ensured.discoveredClues.includes(clue.id) &&
+    clue.tier === 'C' &&
+    pressure.evidenceDecay >= 55
+  ) {
+    return {
+      ok: false,
+      blockedNarrative:
+        '你赶到时，关键痕迹已经被人先一步处理过了。现在留下来的，只够你确认这里曾经出过问题，却不再足以直接翻出核心实情。',
+      missingLeads: [],
+      missingNpcContacts: [],
+      bypassNotes: [],
+    };
+  }
+
+  if (
+    (item.requiresLeads?.length || item.requiresNpcContact?.length) &&
+    currentLocationPressure >= 3
+  ) {
+    return {
+      ok: false,
+      blockedNarrative:
+        item.blockedNarrative ??
+        '这一带的口风已经被搅得太紧。你刚靠近，周围就有人先一步收起了该留在这里的东西。',
+      missingLeads: [],
+      missingNpcContacts: [],
+      bypassNotes: [],
+    };
+  }
 
   if (item.requiresFlag && !ensured.flags[item.requiresFlag]) {
     return {
