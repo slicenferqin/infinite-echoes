@@ -1,4 +1,17 @@
-import { MetaWorldHubPayload } from '../types';
+import { MetaWorldHubPayload, MetaWorldState, PersistentNpcState } from '../types';
+
+interface AjiConversationEffectsInput {
+  state: MetaWorldState;
+  message: string;
+  reply?: string;
+}
+
+interface AjiRelationUpdate {
+  trustDelta: number;
+  suspicionDelta: number;
+  addedTags: string[];
+  revealedTopics: string[];
+}
 
 function clampText(text: string, limit = 120): string {
   const normalized = text.replace(/\s+/g, ' ').trim();
@@ -11,6 +24,7 @@ export function buildAjiSystemPrompt(params: {
   hub: MetaWorldHubPayload;
 }): string {
   const { username, hub } = params;
+  const ajiState = hub.persistentNpcs.find((npc) => npc.id === 'aji');
 
   const npcSummary = hub.persistentNpcs
     .slice(0, 4)
@@ -44,6 +58,12 @@ export function buildAjiSystemPrompt(params: {
 
 你手里掌握的是这个玩家当前在回响之间的状态摘要：
 
+【你和玩家现在的关系】
+- 信任：${ajiState?.trust ?? 0}
+- 戒心：${ajiState?.suspicion ?? 0}
+- 你已经对他松口的话题：${ajiState?.revealedTopics?.join('、') || '暂无'}
+- 你记得他的最近印象：${ajiState?.memorySummary || '你还在判断他是否配知道更多'}
+
 【常驻关系】
 ${npcSummary || '- 暂无'}
 
@@ -61,7 +81,8 @@ ${archiveSummary || '- 暂无'}
 2. 优先回应玩家真正关心的问题，不背设定百科
 3. 如果玩家问得太深，但认知层级不够，就给半句真话和半句保留
 4. 可以轻微提点下一步该看哪里，但不能直接剧透
-5. 不要出现动作旁白、舞台指令、模型身份或系统规则说明`;
+5. 不要出现动作旁白、舞台指令、模型身份或系统规则说明
+6. 如果你与玩家信任不足，就把答案压短，宁可只给半句也不要一次说透`;
 }
 
 export function buildAjiFallbackReply(message: string): string {
@@ -78,4 +99,149 @@ export function buildAjiFallbackReply(message: string): string {
   }
 
   return '你已经带回了不止一份答案，但真正该盯住的，是答案之间那些对不上的地方。';
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function unique(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+function normalize(text: string): string {
+  return text.trim().toLowerCase();
+}
+
+function ensureAjiState(state: MetaWorldState): PersistentNpcState {
+  return (
+    state.persistentNpcStates.aji ?? {
+      npcId: 'aji',
+      trust: 0,
+      suspicion: 0,
+      affinityTags: [],
+      revealedTopics: [],
+      memorySummary: '',
+      lastUpdatedAt: Date.now(),
+    }
+  );
+}
+
+function summarizeAjiMemory(message: string, reply: string): string {
+  const compactMessage = message.replace(/\s+/g, ' ').trim().slice(0, 48);
+  const compactReply = reply.replace(/\s+/g, ' ').trim().slice(0, 64);
+  return `你问过“${compactMessage}”，阿寂当时回你：“${compactReply}”`;
+}
+
+function detectAjiRelationUpdate(
+  state: MetaWorldState,
+  message: string
+): AjiRelationUpdate {
+  const current = ensureAjiState(state);
+  const normalized = normalize(message);
+  let trustDelta = 0;
+  let suspicionDelta = 0;
+  const addedTags: string[] = [];
+  const revealedTopics: string[] = [];
+
+  const empathyHints = ['谢谢', '辛苦', '明白', '理解', '我知道你也难', '我不是来逼你', '请你帮我'];
+  const pressureHints = ['快说', '立刻', '别废话', '你是不是在骗我', '你必须', '告诉我真相'];
+  const archiveHints = ['档案', '记录', '结算', '回执', '版本'];
+  const anomalyHints = ['异常', '回响柱', '异响', '第七座', '裂缝'];
+  const revivalHints = ['复活', '离开', '出去', '回来', '命运余量'];
+  const maintainerHints = ['谁在维护', '是谁写的', '谁在改', '维护层', '系统'];
+
+  if (empathyHints.some((hint) => normalized.includes(hint))) {
+    trustDelta += 2;
+    suspicionDelta -= 1;
+    addedTags.push('feels_safe_with_you');
+  }
+
+  if (pressureHints.some((hint) => normalized.includes(hint))) {
+    trustDelta -= 1;
+    suspicionDelta += 3;
+    addedTags.push('watches_your_words');
+  }
+
+  if (archiveHints.some((hint) => normalized.includes(hint))) {
+    trustDelta += 1;
+    revealedTopics.push('archive_records');
+  }
+
+  if (anomalyHints.some((hint) => normalized.includes(hint))) {
+    trustDelta += 1;
+    revealedTopics.push('pillar_resonance');
+  }
+
+  if (revivalHints.some((hint) => normalized.includes(hint))) {
+    if ((state.cognition.nodes.doubts_revival_promise?.level ?? 0) > 0) {
+      trustDelta += 1;
+      revealedTopics.push('returnees_doubt');
+    } else {
+      suspicionDelta += 1;
+    }
+  }
+
+  if (maintainerHints.some((hint) => normalized.includes(hint))) {
+    if ((state.cognition.nodes.suspects_maintainer_layer_exists?.level ?? 0) > 0) {
+      trustDelta += 1;
+      revealedTopics.push('maintainer_layer');
+      addedTags.push('owes_you_answer');
+    } else {
+      suspicionDelta += 1;
+    }
+  }
+
+  if (current.trust + trustDelta >= 8) {
+    addedTags.push('takes_you_seriously');
+  }
+
+  if (current.trust + trustDelta >= 15) {
+    addedTags.push('answers_in_half_steps');
+  }
+
+  return {
+    trustDelta,
+    suspicionDelta,
+    addedTags: unique(addedTags),
+    revealedTopics: unique(revealedTopics),
+  };
+}
+
+export function applyAjiConversationEffects({
+  state,
+  message,
+  reply,
+}: AjiConversationEffectsInput): {
+  state: MetaWorldState;
+  relationUpdate: AjiRelationUpdate;
+} {
+  const current = ensureAjiState(state);
+  const relationUpdate = detectAjiRelationUpdate(state, message);
+  const nextTrust = clamp(current.trust + relationUpdate.trustDelta, 0, 100);
+  const nextSuspicion = clamp(current.suspicion + relationUpdate.suspicionDelta, 0, 100);
+
+  const nextAjiState: PersistentNpcState = {
+    ...current,
+    trust: nextTrust,
+    suspicion: nextSuspicion,
+    affinityTags: unique([...current.affinityTags, ...relationUpdate.addedTags]),
+    revealedTopics: unique([...current.revealedTopics, ...relationUpdate.revealedTopics]),
+    memorySummary: reply
+      ? summarizeAjiMemory(message, reply)
+      : current.memorySummary,
+    lastUpdatedAt: Date.now(),
+  };
+
+  return {
+    state: {
+      ...state,
+      updatedAt: Date.now(),
+      persistentNpcStates: {
+        ...state.persistentNpcStates,
+        aji: nextAjiState,
+      },
+    },
+    relationUpdate,
+  };
 }

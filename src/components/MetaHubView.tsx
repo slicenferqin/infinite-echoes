@@ -20,6 +20,13 @@ interface AjiMessage {
   content: string;
 }
 
+interface AjiRelationUpdate {
+  trustDelta: number;
+  suspicionDelta: number;
+  addedTags: string[];
+  revealedTopics: string[];
+}
+
 function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleString('zh-CN', {
     month: '2-digit',
@@ -36,6 +43,7 @@ export default function MetaHubView() {
   const [error, setError] = useState<string | null>(null);
   const [ajiInput, setAjiInput] = useState('');
   const [ajiLoading, setAjiLoading] = useState(false);
+  const [ajiRelationHint, setAjiRelationHint] = useState<string | null>(null);
   const [ajiMessages, setAjiMessages] = useState<AjiMessage[]>([
     {
       role: 'aji',
@@ -117,16 +125,45 @@ export default function MetaHubView() {
         body: JSON.stringify({ message }),
       });
 
-      const data = (await response.json()) as { reply?: string; error?: string };
+      const data = (await response.json()) as {
+        reply?: string;
+        error?: string;
+        hub?: MetaWorldHubPayload;
+        relationUpdate?: AjiRelationUpdate;
+      };
       const reply = data.reply?.trim() || '……阿寂沉默了片刻，没有把话说死。';
 
       setAjiMessages((entries) => [...entries, { role: 'aji', content: reply }]);
+      if (data.hub) {
+        setHub(data.hub);
+      }
+
+      const relation = data.relationUpdate;
+      if (relation) {
+        const parts: string[] = [];
+        if (relation.trustDelta !== 0) {
+          parts.push(`信任 ${relation.trustDelta > 0 ? '+' : ''}${relation.trustDelta}`);
+        }
+        if (relation.suspicionDelta !== 0) {
+          parts.push(`戒心 ${relation.suspicionDelta > 0 ? '+' : ''}${relation.suspicionDelta}`);
+        }
+        if (relation.revealedTopics.length > 0) {
+          parts.push(`松口话题：${relation.revealedTopics.join(' / ')}`);
+        }
+        if (relation.addedTags.length > 0) {
+          parts.push(`关系标签：${relation.addedTags.join(' / ')}`);
+        }
+        setAjiRelationHint(parts.length > 0 ? `阿寂的态度发生变化：${parts.join(' · ')}` : null);
+      } else {
+        setAjiRelationHint(null);
+      }
     } catch (requestError) {
       console.error('Failed to ask Aji:', requestError);
       setAjiMessages((entries) => [
         ...entries,
         { role: 'aji', content: '先记下你的问题。这里的回声一乱，我也不想说废话。' },
       ]);
+      setAjiRelationHint(null);
     } finally {
       setAjiLoading(false);
     }
@@ -380,6 +417,11 @@ export default function MetaHubView() {
                   {ajiLoading ? '回应中' : '发问'}
                 </button>
               </div>
+              {ajiRelationHint && (
+                <div className="mt-3 text-xs leading-relaxed" style={{ color: 'var(--system-color)' }}>
+                  {ajiRelationHint}
+                </div>
+              )}
             </section>
 
             <section className="rounded-2xl border p-5" style={{ borderColor: 'var(--border)', background: 'rgba(20,20,24,0.88)' }}>
