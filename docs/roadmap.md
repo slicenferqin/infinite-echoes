@@ -2,6 +2,7 @@
 
 > 注：本文件保留早期副本节奏规划；世界结构与产品方向请以  
 > `/Users/slicenfer/Development/projects/self/infinite-echoes/app/docs/world-architecture-v2.md` 为准。
+> 当前执行顺序请以 `/Users/slicenfer/Development/projects/self/infinite-echoes/app/docs/roadmap-v2-execution.md` 为准。
 
 ## 一、核心设计原则
 

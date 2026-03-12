@@ -3,6 +3,8 @@
 > 本文档用于替代早期“副本 + 元叙事草案”的分散描述，统一当前产品方向、世界观结构与后续实现边界。  
 > 目标不是写一份文学设定集，而是给后续副本设计、系统设计、Agent 设计提供同一套约束。
 
+> 对应执行路线图：`/Users/slicenfer/Development/projects/self/infinite-echoes/app/docs/roadmap-v2-execution.md`
+
 ---
 
 ## 一、产品定位（正式定案）

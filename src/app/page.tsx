@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import GameView from '@/components/GameView';
 import {
@@ -465,15 +466,20 @@ export default function Home() {
           <div className="text-right">
             <div className="text-xs" style={{ color: 'var(--muted)' }}>当前账号</div>
             <div className="text-sm font-bold" style={{ color: 'var(--foreground)' }}>{user.username}</div>
-            <button
-              onClick={() => {
-                void logout();
-              }}
-              className="text-xs mt-1 hover:opacity-80"
-              style={{ color: 'var(--system-color)' }}
-            >
-              退出登录
-            </button>
+            <div className="flex items-center justify-end gap-3 mt-1">
+              <Link href="/hub" className="text-xs hover:opacity-80" style={{ color: 'var(--npc-color)' }}>
+                进入回响之间
+              </Link>
+              <button
+                onClick={() => {
+                  void logout();
+                }}
+                className="text-xs hover:opacity-80"
+                style={{ color: 'var(--system-color)' }}
+              >
+                退出登录
+              </button>
+            </div>
           </div>
         </div>
 

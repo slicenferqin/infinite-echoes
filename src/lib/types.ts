@@ -180,6 +180,84 @@ export interface MetaWorldSummary {
   recentArchives: MetaWorldSummaryItem[];
 }
 
+export interface MetaWorldNpcDetail {
+  id: string;
+  label: string;
+  trust: number;
+  suspicion: number;
+  affinityTags: string[];
+  revealedTopics: string[];
+  memorySummary: string;
+  lastEpisodeId?: string;
+  lastUpdatedAt: number;
+}
+
+export interface MetaWorldAnomalyDetail {
+  id: string;
+  label: string;
+  level: number;
+  firstSeenEpisodeId: string;
+  lastSeenEpisodeId: string;
+  notes: string[];
+  confirmed: boolean;
+}
+
+export interface MetaWorldCognitionDetail {
+  id: string;
+  label: string;
+  level: 0 | 1 | 2 | 3;
+  sourceEpisodeIds: string[];
+  lastUpdatedAt: number;
+}
+
+export interface MetaWorldArchiveDetail {
+  id: string;
+  episodeId: string;
+  routeId: string;
+  routeType: RouteDefinition['type'];
+  title: string;
+  summary: string;
+  learnedTruths: string[];
+  unlockedAt: number;
+}
+
+export interface MetaWorldHubPayload {
+  summary: MetaWorldSummary;
+  persistentNpcs: MetaWorldNpcDetail[];
+  anomalies: MetaWorldAnomalyDetail[];
+  cognition: MetaWorldCognitionDetail[];
+  archiveEntries: MetaWorldArchiveDetail[];
+  recentArtifacts: Array<{
+    id: string;
+    episodeId: string;
+    routeId: string;
+    kind: string;
+    title: string;
+    createdAt: number;
+  }>;
+  recentChronicles: Array<{
+    id: string;
+    episodeId: string;
+    routeId: string;
+    routeType: string;
+    title: string;
+    createdAt: number;
+  }>;
+  novelProjects: Array<{
+    id: string;
+    chronicleEntryId: string;
+    status: string;
+    targetChapterCount: number;
+    targetWordsPerChapter: number;
+    createdAt: number;
+    previewChapters: Array<{
+      chapter: number;
+      title: string;
+      pov: string;
+    }>;
+  }>;
+}
+
 export interface RouteGovernanceCondition {
   orderMin?: number;
   humanityMin?: number;

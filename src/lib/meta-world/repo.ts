@@ -1,6 +1,10 @@
 import { db } from '../db/sqlite';
 import {
   MetaWorldState,
+  MetaWorldNpcDetail,
+  MetaWorldAnomalyDetail,
+  MetaWorldCognitionDetail,
+  MetaWorldArchiveDetail,
   MetaWorldSummary,
   MetaWorldSummaryItem,
 } from '../types';
@@ -186,4 +190,58 @@ export function buildMetaWorldSummary(state: MetaWorldState): MetaWorldSummary {
     cognitionHighlights,
     recentArchives,
   });
+}
+
+export function buildMetaWorldNpcDetails(state: MetaWorldState): MetaWorldNpcDetail[] {
+  return cloneState(
+    Object.values(state.persistentNpcStates)
+      .map((entry) => ({
+        id: entry.npcId,
+        label: NPC_LABELS[entry.npcId] ?? entry.npcId,
+        trust: entry.trust,
+        suspicion: entry.suspicion,
+        affinityTags: [...entry.affinityTags],
+        revealedTopics: [...entry.revealedTopics],
+        memorySummary: entry.memorySummary,
+        lastEpisodeId: entry.lastEpisodeId,
+        lastUpdatedAt: entry.lastUpdatedAt,
+      }))
+      .sort((left, right) => right.trust - left.trust || left.suspicion - right.suspicion)
+  );
+}
+
+export function buildMetaWorldAnomalyDetails(state: MetaWorldState): MetaWorldAnomalyDetail[] {
+  return cloneState(
+    Object.values(state.anomalies.tracks)
+      .map((track) => ({
+        id: track.id,
+        label: ANOMALY_LABELS[track.id] ?? track.id,
+        level: track.level,
+        firstSeenEpisodeId: track.firstSeenEpisodeId,
+        lastSeenEpisodeId: track.lastSeenEpisodeId,
+        notes: [...track.notes],
+        confirmed: track.confirmed,
+      }))
+      .sort((left, right) => right.level - left.level || right.lastSeenEpisodeId.localeCompare(left.lastSeenEpisodeId))
+  );
+}
+
+export function buildMetaWorldCognitionDetails(state: MetaWorldState): MetaWorldCognitionDetail[] {
+  return cloneState(
+    Object.values(state.cognition.nodes)
+      .map((node) => ({
+        id: node.id,
+        label: COGNITION_LABELS[node.id] ?? node.id,
+        level: node.level,
+        sourceEpisodeIds: [...node.sourceEpisodeIds],
+        lastUpdatedAt: node.lastUpdatedAt,
+      }))
+      .sort((left, right) => right.level - left.level || right.lastUpdatedAt - left.lastUpdatedAt)
+  );
+}
+
+export function buildMetaWorldArchiveDetails(state: MetaWorldState): MetaWorldArchiveDetail[] {
+  return cloneState(
+    [...state.archive.entries].sort((left, right) => right.unlockedAt - left.unlockedAt)
+  );
 }
