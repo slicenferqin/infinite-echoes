@@ -64,6 +64,13 @@ export function buildGmSystemPrompt(
     : `当前回合：${gameState.round}/${gameState.maxRounds}`;
 
   const playerIdentity = resolveIdentityForState(episode, gameState);
+  const worldPressure = gameState.worldPressure ?? {
+    publicHeat: 0,
+    evidenceDecay: 0,
+    rumorByNpc: {},
+    locationPressure: {},
+  };
+  const currentLocationPressure = worldPressure.locationPressure[gameState.currentLocation] ?? 0;
 
   return `你是一个文字冒险解谜游戏的 GM（游戏主持人）。你负责叙事、环境描写、场景切换和行为判定。
 
@@ -79,6 +86,7 @@ ${timelineSummary}
 描述：${currentLocation?.description ?? ''}
 在场 NPC：${npcsHere.join('、') || '无'}
 可搜查物品：${searchableDescriptions?.join('；') || '无'}
+世界压力：公开舆论 ${worldPressure.publicHeat}/100；证据流失 ${worldPressure.evidenceDecay}/100；当前地点压力 ${currentLocationPressure}/6
 
 ## 玩家已发现的线索
 ${discoveredClues.length > 0 ? discoveredClues.join('\n') : '暂无'}
@@ -207,8 +215,21 @@ export function buildSceneDescription(
     if (item.requiresFlag && !gameState.flags[item.requiresFlag]) return false;
     return true;
   });
+  const worldPressure = gameState.worldPressure ?? {
+    publicHeat: 0,
+    evidenceDecay: 0,
+    rumorByNpc: {},
+    locationPressure: {},
+  };
+  const currentLocationPressure = worldPressure.locationPressure[locationId] ?? 0;
 
   let desc = location.description;
+
+  if (currentLocationPressure >= 4) {
+    desc += '\n\n这里的气氛明显绷得很紧，像是你再多问一句，周围人就会先一步把该藏的东西收起来。';
+  } else if (currentLocationPressure >= 2) {
+    desc += '\n\n你能感觉到这里的口风比表面更紧，许多人像在等别人先开口。';
+  }
 
   if (npcsHere.length > 0) {
     desc += `\n\n你注意到这里有：${npcsHere.join('、')}。`;

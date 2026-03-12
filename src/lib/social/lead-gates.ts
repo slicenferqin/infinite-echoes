@@ -94,6 +94,23 @@ export function evaluateSearchAccess(
   }
 
   if (
+    clue &&
+    !ensured.discoveredClues.includes(clue.id) &&
+    clue.tier === 'B' &&
+    pressure.evidenceDecay >= 78 &&
+    (item.requiresLeads?.length || item.requiresNpcContact?.length || clue.requiredFlag)
+  ) {
+    return {
+      ok: false,
+      blockedNarrative:
+        '你找到时，这里的关键信息已经被人抹得七零八落。它还没彻底消失，但也不再足够支撑你直接拿到完整中段证据。',
+      missingLeads: [],
+      missingNpcContacts: [],
+      bypassNotes: [],
+    };
+  }
+
+  if (
     (item.requiresLeads?.length || item.requiresNpcContact?.length) &&
     currentLocationPressure >= 3
   ) {

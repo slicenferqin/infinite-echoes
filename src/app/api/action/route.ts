@@ -441,6 +441,12 @@ export async function POST(request: Request) {
     if (transitions.length === 0) return;
 
     for (const transition of transitions) {
+      const beforePressure = state.worldPressure ?? {
+        publicHeat: 0,
+        evidenceDecay: 0,
+        rumorByNpc: {},
+        locationPressure: {},
+      };
       const simulated = simulateWorldEvents({
         userId: auth.user.id,
         sessionId,
@@ -454,6 +460,23 @@ export async function POST(request: Request) {
 
       for (const note of simulated.notifications) {
         state = addNarrative(state, 'system', note);
+      }
+
+      const afterPressure = state.worldPressure ?? beforePressure;
+      if (beforePressure.publicHeat < 40 && afterPressure.publicHeat >= 40) {
+        state = addNarrative(
+          state,
+          'system',
+          '【局势发紧】公开口风已经开始往“尽快定性”倾斜。接下来若还想翻案，你必须更快稳住关键人物。'
+        );
+      }
+
+      if (beforePressure.evidenceDecay < 50 && afterPressure.evidenceDecay >= 50) {
+        state = addNarrative(
+          state,
+          'system',
+          '【证据流失加剧】有些关键痕迹正在消失。越往后拖，你能从现场带走的只会越少。'
+        );
       }
     }
   };
