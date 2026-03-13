@@ -53,6 +53,15 @@ interface ViewerSessionPayload {
   error?: string;
 }
 
+interface AuthApiIssue {
+  message?: string;
+}
+
+interface AuthApiErrorPayload {
+  error?: string;
+  issues?: AuthApiIssue[];
+}
+
 export default function Home() {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -232,9 +241,12 @@ export default function Home() {
         }),
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as AuthApiErrorPayload;
       if (!response.ok) {
-        setAuthError(data.error ?? '认证失败，请稍后重试。');
+        const issueMessage = Array.isArray(data.issues)
+          ? data.issues.find((issue) => typeof issue?.message === 'string')?.message
+          : null;
+        setAuthError(issueMessage ?? data.error ?? '认证失败，请稍后重试。');
         return;
       }
 

@@ -15,7 +15,7 @@ const registerSchema = z.object({
   username: z
     .string()
     .trim()
-    .min(3, '用户名至少 3 个字符')
+    .min(2, '用户名至少 2 个字符')
     .max(24, '用户名最多 24 个字符')
     .regex(/^[\p{L}\p{N}_-]+$/u, '用户名仅支持字母、数字、下划线和中划线'),
   password: z
