@@ -498,29 +498,6 @@ export default function MetaHubView() {
               </div>
             </section>
 
-            <section className="rounded-2xl border p-5" style={{ borderColor: 'var(--border)', background: 'rgba(20,20,24,0.88)' }}>
-              <h2 className="text-sm font-bold tracking-wide mb-3" style={{ color: 'var(--system-color)' }}>
-                主线认知
-              </h2>
-              <div className="space-y-3">
-                {hub.cognition.length > 0 ? hub.cognition.map((entry) => (
-                  <div key={entry.id}>
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span style={{ color: 'var(--foreground)' }}>{entry.label}</span>
-                      <span style={{ color: 'var(--system-color)' }}>{entry.level}/3</span>
-                    </div>
-                    <div className="h-1.5 rounded" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                      <div
-                        className="h-full rounded"
-                        style={{ width: `${(entry.level / 3) * 100}%`, background: 'var(--system-color)' }}
-                      />
-                    </div>
-                  </div>
-                )) : (
-                  <div className="text-sm" style={{ color: 'var(--muted)' }}>你还停留在回响之间给出的表层说明里。</div>
-                )}
-              </div>
-            </section>
           </div>
         </div>
       </div>

@@ -558,19 +558,6 @@ export default function Home() {
                 </div>
 
                 <div>
-                  <div className="text-[11px] mb-1" style={{ color: 'var(--muted)' }}>主线认知</div>
-                  <div className="space-y-1">
-                    {metaWorld.cognitionHighlights.length > 0 ? metaWorld.cognitionHighlights.map((entry) => (
-                      <div key={entry.id} className="text-xs" style={{ color: 'var(--foreground)' }}>
-                        {entry.label} · 层级 {entry.level ?? 0}/3
-                      </div>
-                    )) : (
-                      <div className="text-xs" style={{ color: 'var(--muted)' }}>你仍停留在表层解释。</div>
-                    )}
-                  </div>
-                </div>
-
-                <div>
                   <div className="text-[11px] mb-1" style={{ color: 'var(--muted)' }}>最新档案</div>
                   <div className="space-y-1">
                     {metaWorld.recentArchives.length > 0 ? metaWorld.recentArchives.map((entry) => (
