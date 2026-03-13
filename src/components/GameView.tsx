@@ -71,9 +71,11 @@ interface EpisodePrimerAction {
 }
 
 interface EpisodePrimer {
-  title: string;
-  summary: string;
-  tips: string[];
+  focusName: string;
+  focusRole: string;
+  pulse: string;
+  stake: string;
+  approach: string;
   actions: EpisodePrimerAction[];
 }
 
@@ -243,13 +245,11 @@ function buildEpisodePrimer(params: {
 
   if (!contacted.has('nora')) {
     return {
-      title: '先接住诺拉',
-      summary:
-        '别把这当成普通接任务。诺拉现在押给你的不是案情，而是她父亲还能不能活到明天。',
-      tips: [
-        '先别急着找凶器，先问她父亲近来的异常和她最怕发生什么。',
-        '她越像在逞强，说明她越不想在外人面前塌下去。',
-      ],
+      focusName: '诺拉',
+      focusRole: '求助者 / 父女主线核心',
+      pulse: '她不像在找会破案的人，更像在赌你肯不肯先去看汉克一眼。',
+      stake: '她怕的不是自己丢脸，而是父亲连明天都撑不过去。',
+      approach: '先别追案情，先问她父亲最近哪里不对、她现在最怕什么。',
       actions: [
         isHere('nora')
           ? { label: '先这样问她', input: '对诺拉说：先别急，把你知道的从头告诉我。' }
@@ -265,15 +265,13 @@ function buildEpisodePrimer(params: {
 
   if (!hasItem('cellar_key')) {
     return {
-      title: '下一步先拿到地窖钥匙',
-      summary:
-        contacted.has('edmond')
+      focusName: '艾德蒙',
+      focusRole: '村长 / 阴谋枢纽',
+      pulse: contacted.has('edmond')
           ? '你已经见过艾德蒙，但还没把钥匙拿到手。现在别让话题继续散开，回去把“先见汉克”这件事咬住。'
-          : '想见汉克，先得过艾德蒙这一关。别一上来和他争公道，先把钥匙拿到手，才能去见真正沉默的人。',
-      tips: [
-        '广场会先给你压力，宅邸才会给你真正的门槛。',
-        '艾德蒙最爱讲“大局”和“规矩”，先让他说，再问钥匙。',
-      ],
+          : '想见汉克，先得过艾德蒙这一关。他嘴上说的是大局，心里护的却未必只是村子。',
+      stake: '他既想保住儿子，也想保住自己仍像个能护住全村的村长。',
+      approach: '别先跟他辩公道，先让他说完“规矩”和“大局”，再咬住钥匙。',
       actions: [
         canMoveTo('elder_house')
           ? { label: '去村长宅邸', action: { type: 'move', target: 'elder_house' } }
@@ -289,13 +287,11 @@ function buildEpisodePrimer(params: {
 
   if (!contacted.has('hank')) {
     return {
-      title: '现在去见汉克',
-      summary:
-        '见到汉克时，先别逼命案。先听他第一句问什么，那比任何口供都更快告诉你他在护谁。',
-      tips: [
-        '如果他先问诺拉，说明沉默背后不是认命，而是保护。',
-        '这场对话的目标不是立刻逼出真相，而是判断他到底在替谁扛。',
-      ],
+      focusName: '汉克',
+      focusRole: '被告 / 沉默真相承载者',
+      pulse: '见到汉克时，先别逼命案。先听他第一句问什么，那比任何口供都更快告诉你他在护谁。',
+      stake: '他不是不想活，是更怕诺拉替他活不下去。',
+      approach: '别先逼凶手是谁，先让他确认诺拉会不会被你拖进去。',
       actions: [
         canMoveTo('cellar')
           ? { label: '去地窖见汉克', action: { type: 'move', target: 'cellar' } }
@@ -311,13 +307,16 @@ function buildEpisodePrimer(params: {
 
   if (!contacted.has('mila') || !contacted.has('gareth')) {
     return {
-      title: '把口风和事实拉到一起',
-      summary:
-        '接下来别急着冲结论。去找米拉和加雷斯，一边补伤情，一边看村里口风到底是谁在带。',
-      tips: [
-        '米拉负责把情绪拉回事实。',
-        '加雷斯负责让你看见：全村不是都坏，而是都在退。',
-      ],
+      focusName: !contacted.has('mila') ? '米拉' : '加雷斯',
+      focusRole: !contacted.has('mila') ? '村医 / 伤情与伦理节点' : '矿工班头 / 舆论节点',
+      pulse:
+        '现在别急着下结论。你需要一边把伤情拉回事实，一边看清全村到底是谁在退、谁在带口风。',
+      stake: !contacted.has('mila')
+        ? '她怕自己的专业判断被权力拿去伤另一个无辜的人。'
+        : '他想护汉克，也怕矿工几十口人的饭碗先跟着出事。',
+      approach: !contacted.has('mila')
+        ? '只问伤情和时间，不要让她替你下道德结论。'
+        : '先说明你不是来挑软柿子的，再问谁在急着把汉克先定下来。',
       actions: [
         !contacted.has('mila') && canMoveTo('clinic')
           ? { label: '先去诊所', action: { type: 'move', target: 'clinic' } }
@@ -984,6 +983,13 @@ export default function GameView({
       }),
     [connectedLocs, episode, npcsHere, state]
   );
+  const isEp01CinematicIntro =
+    episode.id === 'ep01' &&
+    state.phase !== 'settlement' &&
+    state.timeline.currentDay === 1 &&
+    state.timeline.currentSlotIndex <= 1 &&
+    (state.socialLedger?.npcContacted.length ?? 0) < 3 &&
+    !state.flags.ep01_hank_anchor_seen;
   const suggestedInput = episodePrimer?.actions.find((action) => action.input)?.input;
   const actionPlaceholder = loading
     ? '处理中...'
@@ -1020,7 +1026,7 @@ export default function GameView({
             <span>回合 {state.round}/{state.maxRounds}</span>
           )}
           <span>📍 {currentLoc?.name ?? '未知'}</span>
-          <span>线索 {discoveredClues.length}/{episode.clues.filter((c) => !c.isFalse).length}</span>
+          <span>线索 {discoveredClues.length}</span>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -1083,20 +1089,24 @@ export default function GameView({
             治理：秩序 {governanceLedger.order} · 人性 {governanceLedger.humanity} · 生存 {governanceLedger.survival}
           </div>
         )}
-        <div>
-          世界压力：舆论 {worldPressure.publicHeat} · 证据流失 {worldPressure.evidenceDecay} · 当前地点 {currentLocationPressure}
-        </div>
-        <div>
-          {routeProgress.length === 0 ? (
-            <span>尚未锁定结局线索</span>
-          ) : (
-            routeProgress.map((entry) => (
-              <span key={entry.routeId} className="mr-3">
-                {getRouteTypeLabel(entry.routeType)}:{entry.progress}%
-              </span>
-            ))
-          )}
-        </div>
+        {!isEp01CinematicIntro && (
+          <>
+            <div>
+              世界压力：舆论 {worldPressure.publicHeat} · 证据流失 {worldPressure.evidenceDecay} · 当前地点 {currentLocationPressure}
+            </div>
+            <div>
+              {routeProgress.length === 0 ? (
+                <span>尚未锁定结局线索</span>
+              ) : (
+                routeProgress.map((entry) => (
+                  <span key={entry.routeId} className="mr-3">
+                    {getRouteTypeLabel(entry.routeType)}:{entry.progress}%
+                  </span>
+                ))
+              )}
+            </div>
+          </>
+        )}
         {state.phase === 'settlement' && settlementArtifacts.length > 0 && (
           <div>
             本次沉淀：{settlementArtifacts.slice(0, 2).map((entry) => entry.title).join(' / ')}
@@ -1142,23 +1152,25 @@ export default function GameView({
 
       {episodePrimer && (
         <div
-          className="px-4 py-3 border-b"
+          className="px-4 py-2 border-b"
           style={{ borderColor: 'var(--border)', background: 'rgba(122,176,212,0.06)' }}
         >
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="min-w-0">
-              <div className="text-xs font-bold mb-1" style={{ color: 'var(--npc-color)' }}>
-                {episodePrimer.title}
+              <div className="text-[11px] font-bold mb-1" style={{ color: 'var(--npc-color)' }}>
+                当前焦点 · {episodePrimer.focusName}
               </div>
               <div className="text-sm leading-relaxed" style={{ color: 'var(--foreground)' }}>
-                {episodePrimer.summary}
+                {episodePrimer.pulse}
               </div>
-              <div className="mt-2 space-y-1">
-                {episodePrimer.tips.map((tip, index) => (
-                  <div key={`${episodePrimer.title}-${index}`} className="text-[11px]" style={{ color: 'var(--muted)' }}>
-                    • {tip}
-                  </div>
-                ))}
+              <div className="mt-2 text-[11px]" style={{ color: 'var(--muted)' }}>
+                {episodePrimer.focusRole}
+              </div>
+              <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'var(--player-color)' }}>
+                在意：{episodePrimer.stake}
+              </div>
+              <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'var(--npc-color)' }}>
+                切口：{episodePrimer.approach}
               </div>
             </div>
             <div className="flex gap-2 flex-wrap">
@@ -1174,9 +1186,6 @@ export default function GameView({
                 </button>
               ))}
             </div>
-          </div>
-          <div className="mt-2 text-[11px]" style={{ color: 'var(--muted)' }}>
-            这是当前更稳的切入顺序，不是强制路线。
           </div>
         </div>
       )}
@@ -1416,21 +1425,23 @@ export default function GameView({
             <div className="mt-1 text-[11px]" style={{ color: 'var(--system-color)' }}>
               代价：{identityPresentation.costs.join('；')}
             </div>
-            <div className="mt-3">
-              <div className="flex items-center justify-between text-[11px] mb-1" style={{ color: 'var(--muted)' }}>
-                <span>身份风险</span>
-                <span style={{ color: 'var(--system-color)' }}>{identityRisk}</span>
+            {!isEp01CinematicIntro && (
+              <div className="mt-3">
+                <div className="flex items-center justify-between text-[11px] mb-1" style={{ color: 'var(--muted)' }}>
+                  <span>身份风险</span>
+                  <span style={{ color: 'var(--system-color)' }}>{identityRisk}</span>
+                </div>
+                <div className="h-1.5 rounded" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                  <div
+                    className="h-full rounded progress-fill"
+                    style={{
+                      width: `${identityRiskPercent}%`,
+                      background: identityRiskPercent >= 70 ? 'var(--system-color)' : 'var(--npc-color)',
+                    }}
+                  />
+                </div>
               </div>
-              <div className="h-1.5 rounded" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                <div
-                  className="h-full rounded progress-fill"
-                  style={{
-                    width: `${identityRiskPercent}%`,
-                    background: identityRiskPercent >= 70 ? 'var(--system-color)' : 'var(--npc-color)',
-                  }}
-                />
-              </div>
-            </div>
+            )}
           </div>
 
           {showGovernanceLedger && (
@@ -1464,77 +1475,83 @@ export default function GameView({
             </div>
           )}
 
-          <div className="rounded border px-3 py-2 mb-4" style={{ borderColor: 'var(--border)', background: 'rgba(212,160,87,0.08)' }}>
-            <div className="text-xs font-bold mb-2" style={{ color: 'var(--system-color)' }}>
-              世界压力
-            </div>
-            <div className="space-y-2">
-              {[
-                { label: '舆论热度', value: worldPressure.publicHeat, color: 'var(--system-color)' },
-                { label: '证据流失', value: worldPressure.evidenceDecay, color: 'var(--clue-color)' },
-                { label: '当前地点压力', value: currentLocationPressure * 16.6, color: 'var(--npc-color)' },
-              ].map((entry) => (
-                <div key={entry.label}>
-                  <div className="flex items-center justify-between text-[11px] mb-1" style={{ color: 'var(--muted)' }}>
-                    <span>{entry.label}</span>
-                    <span style={{ color: entry.color }}>{Math.round(entry.value)}</span>
-                  </div>
-                  <div className="h-1.5 rounded" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                    <div
-                      className="h-full rounded progress-fill"
-                      style={{
-                        width: `${clamp(entry.value, 0, 100)}%`,
-                        background: entry.color,
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-2 text-[11px]" style={{ color: 'var(--muted)' }}>
-              压力升高后，NPC 会更保守，高阶物证也更容易只剩残片。
-            </div>
-          </div>
-
-          <h3 className="text-xs font-bold mb-3" style={{ color: 'var(--system-color)' }}>
-            结局进度
-          </h3>
-          <div className="space-y-3">
-            {routeProgress.length === 0 ? (
-              <div className="text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
-                还没有锁定任何结局线索。继续调查后，这里才会逐条显示对应路线进度。
+          {!isEp01CinematicIntro && (
+            <div className="rounded border px-3 py-2 mb-4" style={{ borderColor: 'var(--border)', background: 'rgba(212,160,87,0.08)' }}>
+              <div className="text-xs font-bold mb-2" style={{ color: 'var(--system-color)' }}>
+                世界压力
               </div>
-            ) : (
-              routeProgress.map((entry) => (
-                <div
-                  key={entry.routeId}
-                  className={`rounded border px-2 py-2 route-progress-item ${highlightedRouteId === entry.routeId ? 'active' : ''}`}
-                  style={{ borderColor: 'var(--border)' }}
-                >
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <span style={{ color: 'var(--foreground)' }}>{getRouteTypeLabel(entry.routeType)}：{entry.routeName}</span>
-                    <span style={{ color: 'var(--system-color)' }}>{entry.progress}%</span>
+              <div className="space-y-2">
+                {[
+                  { label: '舆论热度', value: worldPressure.publicHeat, color: 'var(--system-color)' },
+                  { label: '证据流失', value: worldPressure.evidenceDecay, color: 'var(--clue-color)' },
+                  { label: '当前地点压力', value: currentLocationPressure * 16.6, color: 'var(--npc-color)' },
+                ].map((entry) => (
+                  <div key={entry.label}>
+                    <div className="flex items-center justify-between text-[11px] mb-1" style={{ color: 'var(--muted)' }}>
+                      <span>{entry.label}</span>
+                      <span style={{ color: entry.color }}>{Math.round(entry.value)}</span>
+                    </div>
+                    <div className="h-1.5 rounded" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                      <div
+                        className="h-full rounded progress-fill"
+                        style={{
+                          width: `${clamp(entry.value, 0, 100)}%`,
+                          background: entry.color,
+                        }}
+                      />
+                    </div>
                   </div>
-                  <div className="h-1.5 rounded progress-rail" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                ))}
+              </div>
+              <div className="mt-2 text-[11px]" style={{ color: 'var(--muted)' }}>
+                压力升高后，NPC 会更保守，高阶物证也更容易只剩残片。
+              </div>
+            </div>
+          )}
+
+          {!isEp01CinematicIntro && (
+            <>
+              <h3 className="text-xs font-bold mb-3" style={{ color: 'var(--system-color)' }}>
+                结局进度
+              </h3>
+              <div className="space-y-3">
+                {routeProgress.length === 0 ? (
+                  <div className="text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
+                    还没有锁定任何结局线索。继续调查后，这里才会逐条显示对应路线进度。
+                  </div>
+                ) : (
+                  routeProgress.map((entry) => (
                     <div
-                      className="h-full rounded progress-fill"
-                      style={{
-                        width: `${entry.progress}%`,
-                        background:
-                          entry.routeType === 'HE'
-                            ? 'var(--player-color)'
-                            : entry.routeType === 'TE'
-                              ? 'var(--npc-color)'
-                              : entry.routeType === 'SE'
-                                ? 'var(--clue-color)'
-                                : 'var(--system-color)',
-                      }}
-                    />
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+                      key={entry.routeId}
+                      className={`rounded border px-2 py-2 route-progress-item ${highlightedRouteId === entry.routeId ? 'active' : ''}`}
+                      style={{ borderColor: 'var(--border)' }}
+                    >
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span style={{ color: 'var(--foreground)' }}>{getRouteTypeLabel(entry.routeType)}：{entry.routeName}</span>
+                        <span style={{ color: 'var(--system-color)' }}>{entry.progress}%</span>
+                      </div>
+                      <div className="h-1.5 rounded progress-rail" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                        <div
+                          className="h-full rounded progress-fill"
+                          style={{
+                            width: `${entry.progress}%`,
+                            background:
+                              entry.routeType === 'HE'
+                                ? 'var(--player-color)'
+                                : entry.routeType === 'TE'
+                                  ? 'var(--npc-color)'
+                                  : entry.routeType === 'SE'
+                                    ? 'var(--clue-color)'
+                                    : 'var(--system-color)',
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          )}
 
           {state.phase === 'settlement' && (
             <div className="mt-5 space-y-4">

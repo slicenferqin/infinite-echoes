@@ -166,14 +166,6 @@ export async function POST(request: Request) {
   let gameState = addNarrative(state, 'system', entry.config.openingNarrative);
   gameState = addNarrative(gameState, 'system', entry.config.taskBriefing);
 
-  if (selectedIdentity && modeIdentity === 'random_pool') {
-    gameState = addNarrative(
-      gameState,
-      'system',
-      `【身份抽取】你本局抽到身份：「${selectedIdentity.title}」。${selectedIdentity.brief}`
-    );
-  }
-
   gameState = { ...gameState, phase: 'exploration', round: 0 };
 
   const sessionId = sessionStore.create(gameState, ACTIVE_SESSION_TTL_MS);
