@@ -151,7 +151,7 @@ function applyDynamicEvents(
   ) {
     nextState = setFlag(nextState, 'ep01_square_anchor_seen');
     notifications.push(
-      '【先开审的是村子】广场上没人正式宣布汉克有罪，可你一路走过去，几乎每道目光都像在催他早点认命。这里最可怕的不是骂声，而是很多人明知不对，也先往后退了一步。'
+      '【先开审的是村子】广场上没人正式宣布汉克有罪，可你一路走过去，井边有人看见诺拉就闭了嘴，卖炭的人把摊子往后挪，像怕和她扯上关系。这里最可怕的不是骂声，而是很多人明知不对，也先往后退了一步。'
     );
   }
 
@@ -192,7 +192,7 @@ function applyDynamicEvents(
     if (!nextState.flags.ep01_hank_anchor_seen) {
       nextState = setFlag(nextState, 'ep01_hank_anchor_seen');
       notifications.push(
-        '【先问的不是命案】汉克抬眼后的第一反应不是喊冤，而是确认诺拉有没有被卷进来。你一下明白，他沉默里护着的首先不是自己，而是女儿。'
+        '【先问的不是命案】你刚提到诺拉掌心那枚旧铁戒，汉克喉结就滚了一下。那是他十岁那年亲手给她打的，尺寸早就不合了，她却一直舍不得丢。你一下明白，他沉默里护着的首先不是自己，而是女儿。'
       );
     }
 
