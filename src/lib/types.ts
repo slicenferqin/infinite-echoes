@@ -12,6 +12,20 @@ export interface EpisodeMetaNarrativeHooks {
   postSettlement?: string[];
 }
 
+export interface EpisodeAfterLeaveEffect {
+  routeType: RouteDefinition['type'];
+  outcome: string[];
+}
+
+export interface EpisodeCivilizationFrame {
+  civilizationSlice: string;
+  philosophicalQuestion: string;
+  institutionalCruelty: string[];
+  historicalShadow: string[];
+  metaNarrativeYield: string[];
+  afterPlayerLeaves: EpisodeAfterLeaveEffect[];
+}
+
 export interface EpisodeEvaluationSignal {
   id: string;
   description: string;
@@ -322,6 +336,7 @@ export interface EpisodeConfig {
   canonicalFacts?: string[]; // immutable lore facts that agents must not contradict
   culturalProfile?: CulturalProfile;
   metaNarrativeHooks?: EpisodeMetaNarrativeHooks;
+  civilizationFrame?: EpisodeCivilizationFrame;
   metaStateEffects?: EpisodeMetaEffectRule[];
   evaluation: EpisodeEvaluationConfig;
   openingNarrative: string;
