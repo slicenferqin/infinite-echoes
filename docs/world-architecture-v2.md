@@ -4,6 +4,7 @@
 > 目标不是写一份文学设定集，而是给后续副本设计、系统设计、Agent 设计提供同一套约束。
 
 > 对应执行路线图：`/Users/slicenfer/Development/projects/self/infinite-echoes/app/docs/roadmap-v2-execution.md`
+> 对应主题框架：`/Users/slicenfer/Development/projects/self/infinite-echoes/app/docs/civilization-slice-framework.md`
 
 ---
 
