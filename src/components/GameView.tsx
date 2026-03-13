@@ -64,6 +64,19 @@ interface TimelineViewModel {
   pauseReason?: TimelinePauseReason;
 }
 
+interface EpisodePrimerAction {
+  label: string;
+  action?: GameAction;
+  input?: string;
+}
+
+interface EpisodePrimer {
+  title: string;
+  summary: string;
+  tips: string[];
+  actions: EpisodePrimerAction[];
+}
+
 
 type TalkApproach = NonNullable<GameAction['approach']>;
 
@@ -190,6 +203,139 @@ function buildTimelineView(
   };
 }
 
+function getNpcStanceLabel(state: GameState['npcStates'][string] | undefined): string {
+  if (!state?.isAvailable) return '暂时回避';
+  if (state.stance === 'hostile') return '明显抗拒';
+  if (state.stance === 'guarded') return '带着防备';
+  if (state.trust >= 60) return '愿意多说';
+  return '还在观察你';
+}
+
+function getNpcStanceColor(state: GameState['npcStates'][string] | undefined): string {
+  if (!state?.isAvailable || state.stance === 'hostile') return 'var(--system-color)';
+  if (state.stance === 'guarded') return 'var(--clue-color)';
+  if (state.trust >= 60) return 'var(--player-color)';
+  return 'var(--npc-color)';
+}
+
+function buildEpisodePrimer(params: {
+  episode: EpisodeConfig;
+  state: GameState;
+  connectedLocs: EpisodeConfig['locations'];
+  npcsHere: EpisodeConfig['npcs'];
+}): EpisodePrimer | null {
+  const { episode, state, connectedLocs, npcsHere } = params;
+  if (episode.id !== 'ep01' || state.phase === 'settlement') return null;
+
+  const contacted = new Set(state.socialLedger?.npcContacted ?? []);
+  const isEarlyWindow =
+    state.timeline.mode !== 'realtime_day' ||
+    (state.timeline.currentDay === 1 &&
+      state.timeline.currentSlotIndex <= 1 &&
+      contacted.size < 4);
+
+  if (!isEarlyWindow) return null;
+
+  const canMoveTo = (locationId: string) =>
+    connectedLocs.some((loc) => loc.id === locationId);
+  const isHere = (npcId: string) => npcsHere.some((npc) => npc.id === npcId);
+  const hasItem = (itemId: string) => state.inventory.includes(itemId);
+
+  if (!contacted.has('nora')) {
+    return {
+      title: '先接住诺拉',
+      summary:
+        '别把这当成普通接任务。诺拉现在押给你的不是案情，而是她父亲还能不能活到明天。',
+      tips: [
+        '先别急着找凶器，先问她父亲近来的异常和她最怕发生什么。',
+        '她越像在逞强，说明她越不想在外人面前塌下去。',
+      ],
+      actions: [
+        isHere('nora')
+          ? { label: '先这样问她', input: '对诺拉说：先别急，把你知道的从头告诉我。' }
+          : canMoveTo('bridge')
+            ? { label: '回桥头找诺拉', action: { type: 'move', target: 'bridge' } }
+            : canMoveTo('square')
+              ? { label: '先回广场转桥头', action: { type: 'move', target: 'square' } }
+            : { label: '先环顾这里', action: { type: 'look' } },
+        { label: '环顾桥头/周围', action: { type: 'look' } },
+      ],
+    };
+  }
+
+  if (!hasItem('cellar_key')) {
+    return {
+      title: '下一步先拿到地窖钥匙',
+      summary:
+        contacted.has('edmond')
+          ? '你已经见过艾德蒙，但还没把钥匙拿到手。现在别让话题继续散开，回去把“先见汉克”这件事咬住。'
+          : '想见汉克，先得过艾德蒙这一关。别一上来和他争公道，先把钥匙拿到手，才能去见真正沉默的人。',
+      tips: [
+        '广场会先给你压力，宅邸才会给你真正的门槛。',
+        '艾德蒙最爱讲“大局”和“规矩”，先让他说，再问钥匙。',
+      ],
+      actions: [
+        canMoveTo('elder_house')
+          ? { label: '去村长宅邸', action: { type: 'move', target: 'elder_house' } }
+          : canMoveTo('square')
+            ? { label: '先去广场', action: { type: 'move', target: 'square' } }
+            : { label: '先环顾这里', action: { type: 'look' } },
+        isHere('edmond')
+          ? { label: '先向他要钥匙', input: '对艾德蒙说：我想先见汉克。' }
+          : { label: '准备开口方式', input: '对艾德蒙说：我想先见汉克。' },
+      ],
+    };
+  }
+
+  if (!contacted.has('hank')) {
+    return {
+      title: '现在去见汉克',
+      summary:
+        '见到汉克时，先别逼命案。先听他第一句问什么，那比任何口供都更快告诉你他在护谁。',
+      tips: [
+        '如果他先问诺拉，说明沉默背后不是认命，而是保护。',
+        '这场对话的目标不是立刻逼出真相，而是判断他到底在替谁扛。',
+      ],
+      actions: [
+        canMoveTo('cellar')
+          ? { label: '去地窖见汉克', action: { type: 'move', target: 'cellar' } }
+          : canMoveTo('elder_house')
+            ? { label: '先去宅邸', action: { type: 'move', target: 'elder_house' } }
+            : canMoveTo('square')
+              ? { label: '先回广场转宅邸', action: { type: 'move', target: 'square' } }
+              : { label: '先环顾这里', action: { type: 'look' } },
+        { label: '准备第一句', input: '对汉克说：诺拉还在等你开口。你先告诉我，她现在最该防什么。' },
+      ],
+    };
+  }
+
+  if (!contacted.has('mila') || !contacted.has('gareth')) {
+    return {
+      title: '把口风和事实拉到一起',
+      summary:
+        '接下来别急着冲结论。去找米拉和加雷斯，一边补伤情，一边看村里口风到底是谁在带。',
+      tips: [
+        '米拉负责把情绪拉回事实。',
+        '加雷斯负责让你看见：全村不是都坏，而是都在退。',
+      ],
+      actions: [
+        !contacted.has('mila') && canMoveTo('clinic')
+          ? { label: '先去诊所', action: { type: 'move', target: 'clinic' } }
+          : !contacted.has('gareth') && canMoveTo('miners_quarter')
+            ? { label: '去矿工棚屋区', action: { type: 'move', target: 'miners_quarter' } }
+            : canMoveTo('square')
+              ? { label: '回广场再转场', action: { type: 'move', target: 'square' } }
+              : { label: '先环顾这里', action: { type: 'look' } },
+        !contacted.has('mila')
+          ? { label: '准备问米拉', input: '对米拉说：我需要你只按伤情告诉我，哪里和口供对不上。' }
+          : { label: '准备问加雷斯', input: '对加雷斯说：现在村里到底是谁在急着把汉克先定下来？' },
+      ],
+    };
+  }
+
+  return null;
+}
+
 export default function GameView({
   initialState,
   sessionId,
@@ -303,14 +449,16 @@ export default function GameView({
     }
   }, [talkApproach, presentableClues, presentedClueId]);
 
-  function getNpcsAtLocation(locationId: string) {
-    return episode.npcs.filter((npc) => {
-      const npcState = state.npcStates[npc.id];
-      if (!npcState?.isAvailable) return false;
-      const npcLocation = npcState.locationOverride ?? npc.locationId;
-      return npcLocation === locationId;
-    });
-  }
+  const getNpcsAtLocation = useCallback(
+    (locationId: string) =>
+      episode.npcs.filter((npc) => {
+        const npcState = state.npcStates[npc.id];
+        if (!npcState?.isAvailable) return false;
+        const npcLocation = npcState.locationOverride ?? npc.locationId;
+        return npcLocation === locationId;
+      }),
+    [episode.npcs, state.npcStates]
+  );
 
   const scrollToBottom = useCallback(() => {
     if (logRef.current) {
@@ -811,11 +959,49 @@ export default function GameView({
     return routeType === 'BE' ? 'BE风险' : routeType;
   }
 
-  const currentLoc = episode.locations.find((l) => l.id === state.currentLocation);
-  const connectedLocs = (currentLoc?.connectedTo
-    .map((id) => episode.locations.find((l) => l.id === id))
-    .filter((loc): loc is EpisodeConfig['locations'][number] => !!loc)) ?? [];
-  const npcsHere = getNpcsAtLocation(state.currentLocation);
+  const currentLoc = useMemo(
+    () => episode.locations.find((l) => l.id === state.currentLocation),
+    [episode.locations, state.currentLocation]
+  );
+  const connectedLocs = useMemo(
+    () =>
+      (currentLoc?.connectedTo
+        .map((id) => episode.locations.find((l) => l.id === id))
+        .filter((loc): loc is EpisodeConfig['locations'][number] => !!loc)) ?? [],
+    [currentLoc, episode.locations]
+  );
+  const npcsHere = useMemo(
+    () => getNpcsAtLocation(state.currentLocation),
+    [getNpcsAtLocation, state.currentLocation]
+  );
+  const episodePrimer = useMemo(
+    () =>
+      buildEpisodePrimer({
+        episode,
+        state,
+        connectedLocs,
+        npcsHere,
+      }),
+    [connectedLocs, episode, npcsHere, state]
+  );
+  const suggestedInput = episodePrimer?.actions.find((action) => action.input)?.input;
+  const actionPlaceholder = loading
+    ? '处理中...'
+    : suggestedInput
+      ? `例如：${suggestedInput}`
+      : '输入行动（对xxx说：/ 去xxx / 搜查xxx / 环顾）';
+
+  function runPrimerAction(action: EpisodePrimerAction) {
+    if (action.action) {
+      void sendAction(action.action);
+      return;
+    }
+
+    if (action.input) {
+      setInput(action.input);
+      inputRef.current?.focus();
+    }
+  }
 
   return (
     <div className="h-screen flex flex-col">
@@ -954,6 +1140,47 @@ export default function GameView({
         </div>
       )}
 
+      {episodePrimer && (
+        <div
+          className="px-4 py-3 border-b"
+          style={{ borderColor: 'var(--border)', background: 'rgba(122,176,212,0.06)' }}
+        >
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="min-w-0">
+              <div className="text-xs font-bold mb-1" style={{ color: 'var(--npc-color)' }}>
+                {episodePrimer.title}
+              </div>
+              <div className="text-sm leading-relaxed" style={{ color: 'var(--foreground)' }}>
+                {episodePrimer.summary}
+              </div>
+              <div className="mt-2 space-y-1">
+                {episodePrimer.tips.map((tip, index) => (
+                  <div key={`${episodePrimer.title}-${index}`} className="text-[11px]" style={{ color: 'var(--muted)' }}>
+                    • {tip}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              {episodePrimer.actions.map((action) => (
+                <button
+                  key={action.label}
+                  onClick={() => runPrimerAction(action)}
+                  disabled={loading}
+                  className="px-2 py-1 text-xs rounded border transition-opacity hover:opacity-80 disabled:opacity-40"
+                  style={{ borderColor: 'var(--border)', color: 'var(--system-color)' }}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="mt-2 text-[11px]" style={{ color: 'var(--muted)' }}>
+            这是当前更稳的切入顺序，不是强制路线。
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 flex flex-col min-w-0">
           <div ref={logRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
@@ -1000,6 +1227,62 @@ export default function GameView({
                   style={{ borderColor: 'var(--border)', color: 'var(--system-color)', background: 'rgba(212,160,87,0.08)' }}
                 >
                   正在处理：{pendingActionLabel}
+                </div>
+              )}
+
+              {npcsHere.length > 0 && (
+                <div className="mb-3">
+                  <div className="text-[11px] font-bold mb-2" style={{ color: 'var(--npc-color)' }}>
+                    此地人物
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {npcsHere.map((npc) => {
+                      const npcState = state.npcStates[npc.id];
+                      return (
+                        <button
+                          key={npc.id}
+                          type="button"
+                          onClick={() => {
+                            setInput(`对${npc.name}说：`);
+                            inputRef.current?.focus();
+                          }}
+                          disabled={loading}
+                          className="text-left rounded border px-3 py-2 transition-opacity hover:opacity-85 disabled:opacity-40"
+                          style={{
+                            borderColor: 'var(--border)',
+                            background: 'rgba(255,255,255,0.02)',
+                          }}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="text-sm font-bold" style={{ color: 'var(--foreground)' }}>
+                              {npc.name}
+                            </div>
+                            <div className="text-[10px]" style={{ color: getNpcStanceColor(npcState) }}>
+                              {getNpcStanceLabel(npcState)}
+                            </div>
+                          </div>
+                          <div className="mt-1 text-[11px]" style={{ color: 'var(--muted)' }}>
+                            {npc.role}
+                          </div>
+                          {npc.firstImpression && (
+                            <div className="mt-2 text-[11px] leading-relaxed" style={{ color: 'var(--foreground)' }}>
+                              {npc.firstImpression}
+                            </div>
+                          )}
+                          {npc.emotionalStake && (
+                            <div className="mt-2 text-[11px] leading-relaxed" style={{ color: 'var(--player-color)' }}>
+                              在意：{npc.emotionalStake}
+                            </div>
+                          )}
+                          {npc.approachHint && (
+                            <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'var(--npc-color)' }}>
+                              切口：{npc.approachHint}
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 
@@ -1098,7 +1381,7 @@ export default function GameView({
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   disabled={loading}
-                  placeholder={loading ? '处理中...' : '输入行动（对xxx说：/ 去xxx / 搜查xxx / 环顾）'}
+                  placeholder={actionPlaceholder}
                   className="flex-1 bg-transparent text-sm focus:outline-none disabled:opacity-40"
                   style={{ color: 'var(--foreground)' }}
                 />

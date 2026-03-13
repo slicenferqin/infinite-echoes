@@ -146,6 +146,28 @@ function applyDynamicEvents(
 
   if (
     context.action.type === 'move' &&
+    nextState.currentLocation === 'square' &&
+    !nextState.flags.ep01_square_anchor_seen
+  ) {
+    nextState = setFlag(nextState, 'ep01_square_anchor_seen');
+    notifications.push(
+      '【先开审的是村子】广场上没人正式宣布汉克有罪，可你一路走过去，几乎每道目光都像在催他早点认命。这里最可怕的不是骂声，而是很多人明知不对，也先往后退了一步。'
+    );
+  }
+
+  if (
+    context.action.type === 'talk' &&
+    context.action.target === 'nora' &&
+    !nextState.flags.ep01_nora_anchor_seen
+  ) {
+    nextState = setFlag(nextState, 'ep01_nora_anchor_seen');
+    notifications.push(
+      '【她押上的是最后一点体面】诺拉掌心那枚旧铁戒已经被捏得发亮。你忽然意识到，她不是在找人替自己伸冤，她是在赌父亲还能不能活到明天。'
+    );
+  }
+
+  if (
+    context.action.type === 'move' &&
     nextState.currentLocation === 'elder_house' &&
     !nextState.flags.can_search_house
   ) {
@@ -155,7 +177,25 @@ function applyDynamicEvents(
     );
   }
 
+  if (
+    context.action.type === 'talk' &&
+    context.action.target === 'edmond' &&
+    !nextState.flags.ep01_edmond_anchor_seen
+  ) {
+    nextState = setFlag(nextState, 'ep01_edmond_anchor_seen');
+    notifications.push(
+      '【另一种父亲】艾德蒙嘴里全是“规矩”和“大局”，可你听得出来，他每一句都像在把雷恩往自己身后藏。这个人不只是村长，也是已经错到回不了头的父亲。'
+    );
+  }
+
   if (context.action.type === 'talk' && context.action.target === 'hank') {
+    if (!nextState.flags.ep01_hank_anchor_seen) {
+      nextState = setFlag(nextState, 'ep01_hank_anchor_seen');
+      notifications.push(
+        '【先问的不是命案】汉克抬眼后的第一反应不是喊冤，而是确认诺拉有没有被卷进来。你一下明白，他沉默里护着的首先不是自己，而是女儿。'
+      );
+    }
+
     if (nextState.flags.beat_evening_pressure && !nextState.flags.hank_pressure_notice) {
       nextState = setFlag(nextState, 'hank_pressure_notice');
       notifications.push(

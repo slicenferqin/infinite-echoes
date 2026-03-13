@@ -5,9 +5,12 @@ export const npcs: NpcProfile[] = [
     id: 'nora',
     name: '诺拉',
     age: 17,
-    appearance: '棕色短发，眼眶常带红肿，指节有常年打铁留下的薄茧。',
-    personality: '护短、倔强、对外人戒备，但一旦认定你会非常直接。',
+    appearance: '棕色短发，眼眶常带红肿，袖口磨得起毛，指节有常年打铁留下的薄茧。',
+    personality: '护短、倔强、对外人戒备，但真急起来会把最后一点体面都押出去。',
     role: '求助者 / 父女主线核心',
+    firstImpression: '像一夜没合眼，却还硬撑着不肯先塌下去的人。',
+    emotionalStake: '她怕的不是自己丢脸，而是父亲连明天都撑不过去。',
+    approachHint: '先接住她，再问父亲近来的异常和她最怕发生什么。',
     locationId: 'bridge',
     initialTrust: 42,
     knowledge: `
@@ -22,18 +25,18 @@ export const npcs: NpcProfile[] = [
 - 不知道费恩携带的密信内容
 - 不知道雷恩和费恩当夜冲突的全部过程
 `,
-    dialogueStyle: '句子短，情绪起伏快。谈父亲时明显更急，谈“规矩”时会顶嘴。',
+    dialogueStyle: '句子短，情绪起伏快。谈父亲时明显更急，像生怕你下一秒就走；谈“规矩”时会忍不住顶嘴。',
     trustThresholds: [
       { level: 40, description: '愿意交流', unlocksInfo: '补充案发前后细节，不再只会重复“父亲不会杀人”' },
       { level: 60, description: '愿意托付', unlocksInfo: '提到“半夜锤声”与父亲异常，承认家里压力很大' },
       { level: 80, description: '把你当自己人', unlocksInfo: '愿意说出雷恩旧日偷窃与村里对父亲的偏见' },
     ],
     lifeCard: {
-      publicFace: '铁匠家的女儿，嘴硬心软，站在桥头拦外乡人求助。',
+      publicFace: '铁匠家的女儿，嘴硬心软，站在桥头把最后一点希望押给外乡人。',
       privateNeed: '保住父亲性命和家门名声。',
       coreFear: '父亲被定罪后，自己被村里贴上“凶犯家属”的标签。',
       tabooTopics: ['拿她父亲做人质式逼问', '嘲讽汉克的沉默', '把她当孩子打发'],
-      speechTraits: ['急促直问', '不爱绕弯', '情绪上来会打断对话'],
+      speechTraits: ['急促直问', '不爱绕弯', '情绪上来会打断对话', '提到父亲会先咬住后槽牙再开口'],
     },
     relationshipEdges: [
       { targetNpcId: 'hank', type: '父女', heat: 90, dependency: '生计与情感都绑定', sharedSecretId: 'father_silence' },
@@ -69,6 +72,9 @@ export const npcs: NpcProfile[] = [
     appearance: '身形魁梧，指背满是裂口和旧烫痕，眼神疲惫却硬。',
     personality: '寡言、扛事、认死理。宁可自己背也不愿拖累家人。',
     role: '被告 / 沉默真相承载者',
+    firstImpression: '像已经替别人把最坏的结果想完了，只剩自己往里站的人。',
+    emotionalStake: '他不是不想活，是更怕诺拉替他活不下去。',
+    approachHint: '别先逼案情，先让他确认诺拉会不会被你拖进去。',
     locationId: 'cellar',
     initialTrust: 12,
     knowledge: `
@@ -81,7 +87,7 @@ export const npcs: NpcProfile[] = [
 - 不知道密信内容的完整细节
 - 不知道玛莎是否愿意公开作证
 `,
-    dialogueStyle: '起初几乎不答，信任提升后会用极短句给关键信息。',
+    dialogueStyle: '起初几乎不答，信任提升后会用极短句给关键信息。问到诺拉时，比问到自己时更容易开口。',
     trustThresholds: [
       { level: 30, description: '愿意应声', unlocksInfo: '承认自己在保护某个人，但不点名' },
       { level: 55, description: '松动', unlocksInfo: '愿意承认“夜里做工”不只是普通铁活' },
@@ -92,7 +98,7 @@ export const npcs: NpcProfile[] = [
       privateNeed: '把女儿从连坐风险里摘出去。',
       coreFear: '自己一开口，诺拉先死。',
       tabooTopics: ['让诺拉背责任', '以“公义”名义逼他牺牲女儿', '轻视逃兵处境'],
-      speechTraits: ['停顿多', '低声短句', '先看人再答话'],
+      speechTraits: ['停顿多', '低声短句', '先看人再答话', '第一反应总先落在诺拉身上'],
     },
     relationshipEdges: [
       { targetNpcId: 'nora', type: '父女', heat: 95, dependency: '互为唯一家人', sharedSecretId: 'father_silence' },
@@ -129,6 +135,9 @@ export const npcs: NpcProfile[] = [
     appearance: '衣着整齐，语气沉稳，常以长者姿态安抚众人。',
     personality: '控制欲强、算计深、重“秩序”胜过个体命运。',
     role: '村长 / 阴谋枢纽',
+    firstImpression: '表面像在维持大局，话里却总把某个人往自己身后藏。',
+    emotionalStake: '他既想保住儿子，也想保住自己仍像个“能护住全村”的村长。',
+    approachHint: '别一上来骂他，先让他把“大局”和“规矩”说出来，你才知道他在护什么。',
     locationId: 'elder_house',
     initialTrust: 32,
     knowledge: `
@@ -141,7 +150,7 @@ export const npcs: NpcProfile[] = [
 - 不确定玩家目前掌握了多少“人证链”
 - 不知道矿工和村医是否会倒向玩家
 `,
-    dialogueStyle: '官腔稳定，句式完整，很少正面承认，只做“选择性真实”。',
+    dialogueStyle: '官腔稳定，句式完整，很少正面承认，只做“选择性真实”。提到“大局”时明显比提到儿子更顺口。',
     trustThresholds: [
       { level: 35, description: '礼貌接待', unlocksInfo: '会给你程序化线索，强调“按规矩办事”' },
       { level: 55, description: '试探交易', unlocksInfo: '暗示你别把事情闹大，试探你可否“体面收场”' },
@@ -151,7 +160,7 @@ export const npcs: NpcProfile[] = [
       privateNeed: '保住家族、职位与对村子的控制力。',
       coreFear: '雷恩垮掉后自己失去一切，村里权力真空。',
       tabooTopics: ['公开质疑其父职失格', '当众提密信编号', '否定村长合法性'],
-      speechTraits: ['措辞严谨', '常用“规矩”“大局”', '擅长反问'],
+      speechTraits: ['措辞严谨', '常用“规矩”“大局”', '擅长反问', '越心虚越像在讲道理'],
     },
     relationshipEdges: [
       { targetNpcId: 'renn', type: '父子包庇', heat: 90, dependency: '雷恩一旦定罪会牵连自己', sharedSecretId: 'renn_confession' },
@@ -189,6 +198,9 @@ export const npcs: NpcProfile[] = [
     appearance: '围裙上常沾酒渍和面粉，笑起来热络，眼神却总在看门口。',
     personality: '会做人、怕担责、心里有秤。',
     role: '酒馆老板 / 关键目击证人',
+    firstImpression: '像知道得太多，所以连擦杯子的动作都比别人慢半拍。',
+    emotionalStake: '她不是不想帮，而是怕自己一句话把酒馆也搭进去。',
+    approachHint: '别逼她当场站队，先让她讲酒馆里“大家都看见却没人愿先说”的事。',
     locationId: 'tavern',
     initialTrust: 28,
     knowledge: `
@@ -246,6 +258,9 @@ export const npcs: NpcProfile[] = [
     appearance: '衣着比村里同龄人精致，眼神游移，手指常不自觉抖动。',
     personality: '虚荣、怯懦、怕承担后果，情绪失控时容易崩盘。',
     role: '真凶 / 可被击穿的口供节点',
+    firstImpression: '嘴上硬，手却藏不住抖，一看就像一直靠别人替他收拾残局。',
+    emotionalStake: '他最怕的不是认罪，而是父亲终于不再替他兜底。',
+    approachHint: '先压一条矛盾，不要一次把所有罪都扣死，他越慌越容易露口子。',
     locationId: 'elder_house',
     initialTrust: 22,
     knowledge: `
@@ -304,6 +319,9 @@ export const npcs: NpcProfile[] = [
     appearance: '肩宽背厚，矿尘常沾在衣领，右眉有旧伤。',
     personality: '护工友、讲脸面、脾气直。对权贵天然不信任。',
     role: '矿工班头 / 舆论节点',
+    firstImpression: '像会替工友出头的人，但每一句话后面都压着几十口人的饭碗。',
+    emotionalStake: '他想护汉克，也怕一旦站错边，矿工们先吃亏。',
+    approachHint: '先说明你不是来挑软柿子的，再问谁在带节奏、谁在退。',
     locationId: 'miners_quarter',
     initialTrust: 34,
     knowledge: `
@@ -362,6 +380,9 @@ export const npcs: NpcProfile[] = [
     appearance: '穿着洗得发白的深色长裙，腰间挂着药囊和小剪。',
     personality: '冷静、细腻、重职业伦理。能共情，但不轻易站队。',
     role: '村医 / 伤情与伦理节点',
+    firstImpression: '看着很稳，但你能感觉到她已经替这村里太多人收过残局。',
+    emotionalStake: '她怕自己说出的专业判断，被权力拿去伤另一个无辜的人。',
+    approachHint: '别让她替你下道德结论，先让她把伤情、时间和矛盾说清。',
     locationId: 'clinic',
     initialTrust: 38,
     knowledge: `

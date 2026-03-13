@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { ApiActionRequest, ConversationMessage, GameState } from '@/lib/types';
+import {
+  ApiActionRequest,
+  ConversationMessage,
+  GameState,
+  NpcProfile,
+  NpcState,
+} from '@/lib/types';
 import { callLlmWithMeta, LlmError } from '@/lib/llm';
 import {
   addNarrative,
@@ -191,6 +197,44 @@ function getApproachEmotionTag(
   if (approach === 'exchange') return 'calculating';
   if (approach === 'present_evidence') return trustDelta >= 0 ? 'shaken' : 'cornered';
   return trustDelta >= 0 ? 'attentive' : 'guarded';
+}
+
+function describeNpcReactionShift(
+  npc: NpcProfile,
+  before: NpcState | undefined,
+  after: NpcState | undefined
+): string | null {
+  if (!before || !after) return null;
+
+  const trustDiff = after.trust - before.trust;
+  const threatDiff = after.threat - before.threat;
+  const stanceChanged = before.stance !== after.stance;
+
+  if (after.stance === 'hostile' && (stanceChanged || threatDiff >= 12)) {
+    return `【关系反馈】${npc.name}彻底把话收住了。你再往前逼，只会让这条关系继续坏下去。`;
+  }
+
+  if (after.stance === 'guarded' && before.stance === 'open') {
+    return `【关系反馈】${npc.name}明显把心门往里关了一层。接下来得更小心地选说法。`;
+  }
+
+  if (trustDiff >= 4) {
+    return `【关系反馈】${npc.name}看你的眼神第一次没那么绷了。你已经不只是个路过的外乡人。`;
+  }
+
+  if (trustDiff >= 2) {
+    return `【关系反馈】${npc.name}对你的戒心松了一截。现在继续顺着这条口子问，会比硬逼更有效。`;
+  }
+
+  if (trustDiff <= -3 || threatDiff >= 10) {
+    return `【关系反馈】${npc.name}把话往回收得很明显。你刚才的推进方式已经让对方更防你了。`;
+  }
+
+  if (trustDiff <= -1) {
+    return `【关系反馈】${npc.name}仍在防着你。再问下去之前，最好先换个更能让人接得住的切口。`;
+  }
+
+  return null;
 }
 
 function applyRuntimeResult(
@@ -827,6 +871,14 @@ export async function POST(request: Request) {
         applySocialMutation(socialMutation);
 
         const finalNpcState = state.npcStates[npc.id];
+        const reactionShiftNote = describeNpcReactionShift(
+          npc,
+          npcState,
+          finalNpcState
+        );
+        if (reactionShiftNote) {
+          state = addNarrative(state, 'system', reactionShiftNote);
+        }
         const allTalkClueIds = uniqueStrings([
           ...parsedNpc.clueIds,
           ...unlocked.unlockedClues,

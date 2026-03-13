@@ -424,6 +424,9 @@ export interface NpcProfile {
   appearance: string;
   personality: string;
   role: string;
+  firstImpression?: string;
+  emotionalStake?: string;
+  approachHint?: string;
   locationId: string; // default location
   initialTrust: number;
   knowledge: string; // what they know (for system prompt)
