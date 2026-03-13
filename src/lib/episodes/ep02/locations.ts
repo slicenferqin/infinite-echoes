@@ -60,7 +60,7 @@ export const locations: Location[] = [
         clueId: 'C3',
         requiresLeads: ['lead_private_route'],
         blockedNarrative:
-          '你掀开地板缝隙，只看到一层杂物灰。没有路线线头时，这里看起来只是普通夹层。',
+          '你掀开地板缝隙，只看到一层杂物灰和旧账角。没有人先把私驿线头说破，这里看上去只像港口最普通的脏地方。',
       },
       {
         id: 'weide_desk_note',
@@ -98,7 +98,7 @@ export const locations: Location[] = [
         requiresFlag: 'can_search_notary_archive',
         requiresLeads: ['lead_notary_fee_code'],
         blockedNarrative:
-          '你翻遍了档柜，只看到常规账册。没有费码入口，这里很难直接碰到那本暗账。',
+          '你翻遍了档柜，只看到按规矩摆好的常规账册。没有费码入口，这里只会给你一个“程序一切正常”的表面。',
       },
       {
         id: 'notary_old_cases',
@@ -107,7 +107,7 @@ export const locations: Location[] = [
         requiresFlag: 'can_search_notary_archive',
         requiresLeads: ['lead_old_case_index'],
         blockedNarrative:
-          '卷宗堆得像墙，没有索引线就只能盲翻。你暂时还抓不到那批关键旧案。',
+          '卷宗堆得像墙，没有索引线就只能盲翻。你会看到很多年份，却抓不到那批真正重复吃人的旧案。',
       },
     ],
   },
@@ -141,7 +141,7 @@ export const locations: Location[] = [
         requiresLeads: ['lead_warehouse_key'],
         requiresNpcContact: ['weide'],
         blockedNarrative:
-          '你试着撬开铁箱，却被双层锁卡死。没有钥匙链线索和魏德那头的交接信息，这里只能看到表面。',
+          '你试着撬开铁箱，却被双层锁卡死。没有钥匙链线索和魏德那头的交接信息，这里只会让你看见“有问题”，却拿不出能入档的真东西。',
       },
       {
         id: 'warehouse_fake_stamp_rumor',
