@@ -142,6 +142,7 @@ ${culturalTaboo || '- 无'}
 在案件中的角色：${npc.role}
 ${npc.firstImpression ? `初见给人的感觉：${npc.firstImpression}` : ''}
 ${npc.emotionalStake ? `你此刻最在意的事：${npc.emotionalStake}` : ''}
+${npc.signatureLine ? `你最容易脱口而出的那句话：${npc.signatureLine}` : ''}
 
 ## 对方身份（玩家）
 对方现在的社会身份：${playerIdentity.title}（${playerIdentity.name}）

@@ -339,6 +339,11 @@ export interface EpisodeConfig {
   civilizationFrame?: EpisodeCivilizationFrame;
   metaStateEffects?: EpisodeMetaEffectRule[];
   evaluation: EpisodeEvaluationConfig;
+  openingSequence?: Array<{
+    type: NarrativeEntry['type'];
+    content: string;
+    speaker?: string;
+  }>;
   openingNarrative: string;
   taskBriefing: string;
 }
@@ -427,6 +432,7 @@ export interface NpcProfile {
   firstImpression?: string;
   emotionalStake?: string;
   approachHint?: string;
+  signatureLine?: string;
   locationId: string; // default location
   initialTrust: number;
   knowledge: string; // what they know (for system prompt)

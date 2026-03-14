@@ -11,6 +11,7 @@ export const npcs: NpcProfile[] = [
     firstImpression: '像一夜没合眼，却还硬撑着不肯先塌下去的人。',
     emotionalStake: '她怕的不是自己丢脸，而是父亲连明天都撑不过去。',
     approachHint: '先接住她，再问父亲近来的异常和她最怕发生什么。',
+    signatureLine: '地窖一冷，他旧伤就犯。',
     locationId: 'bridge',
     initialTrust: 42,
     knowledge: `
@@ -75,6 +76,7 @@ export const npcs: NpcProfile[] = [
     firstImpression: '像已经替别人把最坏的结果想完了，只剩自己往里站的人。',
     emotionalStake: '他不是不想活，是更怕诺拉替他活不下去。',
     approachHint: '别先逼案情，先让他确认诺拉会不会被你拖进去。',
+    signatureLine: '诺拉今天吃了没有。',
     locationId: 'cellar',
     initialTrust: 12,
     knowledge: `
@@ -138,6 +140,7 @@ export const npcs: NpcProfile[] = [
     firstImpression: '表面像在维持大局，话里却总把某个人往自己身后藏。',
     emotionalStake: '他既想保住儿子，也想保住自己仍像个“能护住全村”的村长。',
     approachHint: '别一上来骂他，先让他把“大局”和“规矩”说出来，你才知道他在护什么。',
+    signatureLine: '他小时候不是这样的。',
     locationId: 'elder_house',
     initialTrust: 32,
     knowledge: `

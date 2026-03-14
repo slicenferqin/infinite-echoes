@@ -163,7 +163,16 @@ export async function POST(request: Request) {
     selectedIdentity
   );
 
-  let gameState = addNarrative(state, 'system', entry.config.openingNarrative);
+  let gameState = state;
+
+  if (entry.config.openingSequence && entry.config.openingSequence.length > 0) {
+    for (const beat of entry.config.openingSequence) {
+      gameState = addNarrative(gameState, beat.type, beat.content, beat.speaker);
+    }
+  } else {
+    gameState = addNarrative(gameState, 'system', entry.config.openingNarrative);
+  }
+
   gameState = addNarrative(gameState, 'system', entry.config.taskBriefing);
 
   gameState = { ...gameState, phase: 'exploration', round: 0 };
