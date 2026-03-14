@@ -46,6 +46,12 @@ function resolveMode(values) {
   return hasLiveHints ? 'live' : 'mock';
 }
 
+function resolveApiStyle(values) {
+  const explicit = valueFrom(values, 'LLM_API_STYLE').toLowerCase();
+  if (explicit === 'anthropic') return 'anthropic';
+  return 'openai';
+}
+
 const { values, exists } = parseEnvFile(envPath);
 const issues = [];
 const warnings = [];
@@ -57,6 +63,7 @@ if (!exists) {
 }
 
 const llmMode = resolveMode(values);
+const llmApiStyle = resolveApiStyle(values);
 const llmBaseUrl = valueFrom(values, 'LLM_BASE_URL');
 const llmApiKey = valueFrom(values, 'LLM_API_KEY');
 const llmModel = valueFrom(values, 'LLM_MODEL');
@@ -66,6 +73,10 @@ const dbDir = path.dirname(dbPath);
 const authCookieSecure = valueFrom(values, 'AUTH_COOKIE_SECURE') || 'false';
 
 if (llmMode === 'live') {
+  const explicitApiStyle = valueFrom(values, 'LLM_API_STYLE');
+  if (explicitApiStyle && !['openai', 'anthropic'].includes(explicitApiStyle.toLowerCase())) {
+    issues.push(`LLM_API_STYLE 仅支持 openai 或 anthropic，当前值：${explicitApiStyle}`);
+  }
   if (!llmBaseUrl) issues.push('LLM_MODE=live 但缺少 LLM_BASE_URL');
   if (!llmApiKey) issues.push('LLM_MODE=live 但缺少 LLM_API_KEY');
   if (!llmModel) issues.push('LLM_MODE=live 但缺少 LLM_MODEL');
@@ -84,6 +95,7 @@ if (!['true', 'false'].includes(authCookieSecure)) {
 console.log('Infinite Echoes contributor doctor');
 console.log(`- env file: ${targetEnvFile}${exists ? '' : ' (missing)'}`);
 console.log(`- llm mode: ${llmMode}`);
+console.log(`- llm api style: ${llmApiStyle}`);
 console.log(`- db path: ${dbPath}`);
 console.log(`- auth cookie secure: ${authCookieSecure}`);
 

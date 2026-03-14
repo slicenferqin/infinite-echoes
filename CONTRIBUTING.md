@@ -33,6 +33,7 @@ npm run dev
 
 ```bash
 LLM_MODE=live
+LLM_API_STYLE=openai
 LLM_BASE_URL=https://your-openai-compatible-gateway.example.com/v1
 LLM_API_KEY=your_key_or_dummy
 LLM_MODEL=your_model_name
@@ -40,7 +41,8 @@ LLM_MODEL=your_model_name
 
 说明：
 
-- 网关必须兼容 OpenAI `chat.completions`
+- `LLM_API_STYLE=openai` 时，网关必须兼容 OpenAI `chat.completions`
+- `LLM_API_STYLE=anthropic` 时，网关必须兼容 Anthropic `v1/messages`
 - 如果你的网关不校验 key，`LLM_API_KEY` 也要填一个非空值，例如 `dummy`
 
 ## 提交前自检

@@ -48,6 +48,7 @@ Create `.env.local` from `.env.local.example`:
 
 ```bash
 LLM_MODE=mock
+LLM_API_STYLE=openai
 APP_DB_PATH=./data/dev.sqlite
 AUTH_COOKIE_SECURE=false
 ```
@@ -55,7 +56,9 @@ AUTH_COOKIE_SECURE=false
 Notes:
 - 默认 `LLM_MODE=mock`，贡献者复制配置后即可直接启动，不需要先接真实模型。
 - 切到 `LLM_MODE=live` 时，必须同时提供 `LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`。
-- `LLM_BASE_URL` 必须兼容 OpenAI `chat.completions`。
+- `LLM_API_STYLE` 仅支持 `openai` 或 `anthropic`，默认是 `openai`。
+- 当 `LLM_API_STYLE=openai` 时，`LLM_BASE_URL` 必须兼容 OpenAI `chat.completions`。
+- 当 `LLM_API_STYLE=anthropic` 时，`LLM_BASE_URL` 必须兼容 Anthropic `v1/messages`。
 - 如果你的网关不校验 key，`LLM_API_KEY` 也要填一个非空占位值，例如 `dummy`。
 - Production should set `AUTH_COOKIE_SECURE=true`.
 - `APP_DB_PATH` should point to a persistent disk path in production.

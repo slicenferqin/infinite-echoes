@@ -1,3 +1,4 @@
+import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 
 const MOCK_MODEL = 'mock-contributor-v1';
@@ -49,6 +50,7 @@ export interface LlmCallMeta {
 
 export interface LlmRuntimeConfig {
   mode: 'live' | 'mock';
+  apiStyle: 'openai' | 'anthropic';
   baseURL: string;
   apiKey: string;
   model: string;
@@ -61,6 +63,7 @@ function normalizeEnv(value: string | undefined): string {
 
 export function getLlmRuntimeConfig(): LlmRuntimeConfig {
   const explicitMode = normalizeEnv(process.env.LLM_MODE).toLowerCase();
+  const explicitApiStyle = normalizeEnv(process.env.LLM_API_STYLE).toLowerCase();
   const baseURL = normalizeEnv(process.env.LLM_BASE_URL);
   const apiKey = normalizeEnv(process.env.LLM_API_KEY);
   const model = normalizeEnv(process.env.LLM_MODEL);
@@ -76,6 +79,15 @@ export function getLlmRuntimeConfig(): LlmRuntimeConfig {
           : 'mock';
 
   const issues: string[] = [];
+  let apiStyle: 'openai' | 'anthropic' = 'openai';
+
+  if (explicitApiStyle) {
+    if (explicitApiStyle === 'openai' || explicitApiStyle === 'anthropic') {
+      apiStyle = explicitApiStyle;
+    } else {
+      issues.push('LLM_API_STYLE 仅支持 openai 或 anthropic');
+    }
+  }
 
   if (mode === 'live') {
     if (!baseURL) issues.push('缺少 LLM_BASE_URL');
@@ -85,6 +97,7 @@ export function getLlmRuntimeConfig(): LlmRuntimeConfig {
 
   return {
     mode,
+    apiStyle,
     baseURL,
     apiKey,
     model,
@@ -318,32 +331,52 @@ function buildMockResponse(
   };
 }
 
-function createClient(config: LlmRuntimeConfig): OpenAI {
+function createOpenAIClient(config: LlmRuntimeConfig): OpenAI {
   return new OpenAI({
     baseURL: config.baseURL,
     apiKey: config.apiKey,
   });
 }
 
-export async function callLlmWithMeta(
+function createAnthropicClient(config: LlmRuntimeConfig): Anthropic {
+  return new Anthropic({
+    baseURL: config.baseURL,
+    apiKey: config.apiKey,
+  });
+}
+
+function normalizeAnthropicUsage(
+  usage:
+    | {
+        input_tokens?: number | null;
+        output_tokens?: number | null;
+        cache_creation_input_tokens?: number | null;
+        cache_read_input_tokens?: number | null;
+      }
+    | undefined
+): LlmCallMeta['usage'] {
+  if (!usage) return undefined;
+
+  const promptTokens =
+    (usage.input_tokens ?? 0) +
+    (usage.cache_creation_input_tokens ?? 0) +
+    (usage.cache_read_input_tokens ?? 0);
+  const completionTokens = usage.output_tokens ?? 0;
+
+  return {
+    promptTokens,
+    completionTokens,
+    totalTokens: promptTokens + completionTokens,
+  };
+}
+
+async function callOpenAiCompatible(
+  config: LlmRuntimeConfig,
   systemPrompt: string,
   messages: LlmMessage[],
   options?: LlmCallOptions
 ): Promise<LlmCallMeta> {
-  const config = getLlmRuntimeConfig();
-
-  if (config.mode === 'mock') {
-    return buildMockResponse(systemPrompt, messages);
-  }
-
-  if (config.issues.length > 0) {
-    throw new LlmError(
-      'config',
-      `LLM live 配置不完整：${config.issues.join('、')}。请检查 .env.local，或移除 live 配置字段以回退到 mock 模式。`
-    );
-  }
-
-  const client = createClient(config);
+  const client = createOpenAIClient(config);
   const maxAttempts = Math.max(1, options?.maxAttempts ?? 3);
   const timeoutMs = Math.max(1_000, options?.timeoutMs ?? 15_000);
 
@@ -412,6 +445,96 @@ export async function callLlmWithMeta(
   }
 
   throw new LlmError('unknown', 'LLM 调用失败且未返回具体错误', lastError);
+}
+
+async function callAnthropicCompatible(
+  config: LlmRuntimeConfig,
+  systemPrompt: string,
+  messages: LlmMessage[],
+  options?: LlmCallOptions
+): Promise<LlmCallMeta> {
+  const client = createAnthropicClient(config);
+  const maxAttempts = Math.max(1, options?.maxAttempts ?? 3);
+  const timeoutMs = Math.max(1_000, options?.timeoutMs ?? 15_000);
+  const anthropicMessages = messages.map((message) => ({
+    role: message.role,
+    content: message.content,
+  }));
+
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const startedAt = Date.now();
+
+    try {
+      const response = await client.messages.create(
+        {
+          model: config.model,
+          max_tokens: options?.maxTokens ?? 1024,
+          temperature: options?.temperature ?? 0.7,
+          system: systemPrompt,
+          messages: anthropicMessages,
+        },
+        {
+          signal: controller.signal,
+        }
+      );
+
+      clearTimeout(timer);
+
+      const text = normalizeContent(response.content);
+      if (!text) {
+        throw new LlmError('invalid_response', 'LLM 返回了空内容');
+      }
+
+      return {
+        text,
+        model: response.model ?? config.model,
+        latencyMs: Date.now() - startedAt,
+        attempts: attempt,
+        usage: normalizeAnthropicUsage(response.usage),
+      };
+    } catch (error) {
+      clearTimeout(timer);
+      lastError = error;
+
+      const retryable = isRetryable(error);
+      if (!retryable || attempt >= maxAttempts) {
+        const type = error instanceof LlmError ? error.type : classifyError(error);
+        const message =
+          error instanceof Error ? error.message : '调用 LLM 时发生未知错误';
+        throw new LlmError(type, message, error);
+      }
+    }
+  }
+
+  throw new LlmError('unknown', 'LLM 调用失败且未返回具体错误', lastError);
+}
+
+export async function callLlmWithMeta(
+  systemPrompt: string,
+  messages: LlmMessage[],
+  options?: LlmCallOptions
+): Promise<LlmCallMeta> {
+  const config = getLlmRuntimeConfig();
+
+  if (config.mode === 'mock') {
+    return buildMockResponse(systemPrompt, messages);
+  }
+
+  if (config.issues.length > 0) {
+    throw new LlmError(
+      'config',
+      `LLM live 配置不完整：${config.issues.join('、')}。请检查 .env.local，或移除 live 配置字段以回退到 mock 模式。`
+    );
+  }
+  if (config.apiStyle === 'anthropic') {
+    return callAnthropicCompatible(config, systemPrompt, messages, options);
+  }
+
+  return callOpenAiCompatible(config, systemPrompt, messages, options);
 }
 
 export async function callLlm(
