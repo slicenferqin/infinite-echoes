@@ -990,6 +990,27 @@ export default function GameView({
     state.timeline.currentSlotIndex <= 1 &&
     (state.socialLedger?.npcContacted.length ?? 0) < 3 &&
     !state.flags.ep01_hank_anchor_seen;
+  const openingLogCount =
+    (episode.openingSequence?.length ?? 0) + (episode.taskBriefing ? 1 : 0);
+  const isOpeningSceneVisible =
+    isEp01CinematicIntro &&
+    state.actionHistory.length === 0 &&
+    openingLogCount > 0 &&
+    state.narrativeLog.length >= openingLogCount;
+  const openingSceneEntries = useMemo(
+    () =>
+      isOpeningSceneVisible
+        ? state.narrativeLog.slice(0, openingLogCount)
+        : [],
+    [isOpeningSceneVisible, openingLogCount, state.narrativeLog]
+  );
+  const visibleNarrativeLog = useMemo(
+    () =>
+      isOpeningSceneVisible
+        ? state.narrativeLog.slice(openingLogCount)
+        : state.narrativeLog,
+    [isOpeningSceneVisible, openingLogCount, state.narrativeLog]
+  );
   const suggestedInput = episodePrimer?.actions.find((action) => action.input)?.input;
   const actionPlaceholder = loading
     ? '处理中...'
@@ -1150,7 +1171,7 @@ export default function GameView({
         </div>
       )}
 
-      {episodePrimer && (
+      {episodePrimer && !isOpeningSceneVisible && (
         <div
           className="px-4 py-2 border-b"
           style={{ borderColor: 'var(--border)', background: 'rgba(122,176,212,0.06)' }}
@@ -1192,8 +1213,105 @@ export default function GameView({
 
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 flex flex-col min-w-0">
+          {isOpeningSceneVisible && episodePrimer && (
+            <div
+              className="border-b px-4 py-4 shrink-0"
+              style={{ borderColor: 'var(--border)', background: 'rgba(255,255,255,0.02)' }}
+            >
+              <div className="max-w-4xl">
+                <div className="text-[11px] tracking-[0.2em] mb-2" style={{ color: 'var(--muted)' }}>
+                  村口石桥 · 开场
+                </div>
+                <div className="space-y-4">
+                  {openingSceneEntries.map((entry, index) => {
+                    if (entry.type === 'npc') {
+                      return (
+                        <div
+                          key={`opening-${index}`}
+                          className="rounded-xl border px-4 py-3"
+                          style={{
+                            borderColor: 'rgba(122,176,212,0.28)',
+                            background: 'rgba(122,176,212,0.08)',
+                          }}
+                        >
+                          <div className="text-xs font-bold mb-2" style={{ color: 'var(--npc-color)' }}>
+                            【{entry.speaker ?? '来者'}】
+                          </div>
+                          <div className="text-base leading-8 whitespace-pre-wrap" style={{ color: 'var(--foreground)' }}>
+                            {entry.content}
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    if (entry.type === 'system') {
+                      return (
+                        <div
+                          key={`opening-${index}`}
+                          className="rounded-lg px-4 py-3"
+                          style={{
+                            background: 'rgba(212,160,87,0.08)',
+                            border: '1px solid rgba(212,160,87,0.2)',
+                          }}
+                        >
+                          <div className="text-sm font-bold" style={{ color: 'var(--system-color)' }}>
+                            {entry.content}
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={`opening-${index}`}
+                        className="text-base leading-8 whitespace-pre-wrap"
+                        style={{ color: 'var(--foreground)' }}
+                      >
+                        {entry.content}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div
+                  className="mt-4 rounded-xl border px-4 py-3"
+                  style={{ borderColor: 'var(--border)', background: 'rgba(122,176,212,0.04)' }}
+                >
+                  <div className="text-[11px] font-bold mb-1" style={{ color: 'var(--npc-color)' }}>
+                    当前焦点 · {episodePrimer.focusName}
+                  </div>
+                  <div className="text-sm leading-relaxed" style={{ color: 'var(--foreground)' }}>
+                    {episodePrimer.pulse}
+                  </div>
+                  <div className="mt-2 text-[11px]" style={{ color: 'var(--muted)' }}>
+                    {episodePrimer.focusRole}
+                  </div>
+                  <div className="mt-1 text-[11px]" style={{ color: 'var(--player-color)' }}>
+                    在意：{episodePrimer.stake}
+                  </div>
+                  <div className="mt-1 text-[11px]" style={{ color: 'var(--npc-color)' }}>
+                    切口：{episodePrimer.approach}
+                  </div>
+                  <div className="mt-3 flex gap-2 flex-wrap">
+                    {episodePrimer.actions.map((action) => (
+                      <button
+                        key={action.label}
+                        onClick={() => runPrimerAction(action)}
+                        disabled={loading}
+                        className="px-3 py-1.5 text-xs rounded border transition-opacity hover:opacity-80 disabled:opacity-40"
+                        style={{ borderColor: 'var(--border)', color: 'var(--system-color)' }}
+                      >
+                        {action.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div ref={logRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-            {state.narrativeLog.map((entry, i) => (
+            {visibleNarrativeLog.map((entry, i) => (
               <div key={`log-${i}`} className="narrative-entry text-sm leading-relaxed whitespace-pre-wrap">
                 {entry.type === 'player' ? (
                   <div style={{ color: getEntryColor(entry.type) }}>
@@ -1239,7 +1357,7 @@ export default function GameView({
                 </div>
               )}
 
-              {npcsHere.length > 0 && (
+              {npcsHere.length > 0 && !isOpeningSceneVisible && (
                 <div className="mb-3">
                   <div className="text-[11px] font-bold mb-2" style={{ color: 'var(--npc-color)' }}>
                     此地人物
@@ -1295,6 +1413,7 @@ export default function GameView({
                 </div>
               )}
 
+              {!isOpeningSceneVisible && (
               <div className="flex gap-2 mb-2 flex-wrap">
                 {connectedLocs.map((loc) => (
                   <button
@@ -1334,7 +1453,9 @@ export default function GameView({
                   环顾四周
                 </button>
               </div>
+              )}
 
+              {!isOpeningSceneVisible && (
               <div className="mb-2 flex flex-wrap items-center gap-2 text-xs" style={{ color: 'var(--muted)' }}>
                 <span style={{ color: 'var(--npc-color)' }}>对话策略</span>
                 <select
@@ -1380,6 +1501,7 @@ export default function GameView({
                 )}
                 <span style={{ color: 'var(--muted)' }}>· {TALK_APPROACH_HINT[talkApproach]}</span>
               </div>
+              )}
 
               <div className="flex items-center gap-2">
                 <span className="text-sm" style={{ color: 'var(--player-color)' }}>&gt;</span>
