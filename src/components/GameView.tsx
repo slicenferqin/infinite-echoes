@@ -73,9 +73,9 @@ interface EpisodePrimerAction {
 interface EpisodePrimer {
   focusName: string;
   focusRole: string;
-  pulse: string;
-  stake: string;
-  approach: string;
+  summary: string;
+  urgency: string;
+  nextStep: string;
   actions: EpisodePrimerAction[];
 }
 
@@ -246,19 +246,22 @@ function buildEpisodePrimer(params: {
   if (!contacted.has('nora')) {
     return {
       focusName: '诺拉',
-      focusRole: '求助者 / 父女主线核心',
-      pulse: '她不像在找会破案的人，更像在赌你肯不肯先去看汉克一眼。',
-      stake: '她怕的不是自己丢脸，而是父亲连明天都撑不过去。',
-      approach: '先别追案情，先问她父亲最近哪里不对、她现在最怕什么。',
+      focusRole: '桥头求助者 / 父女线入口',
+      summary: '她翻来覆去求你的，只有一件事：先去见汉克。',
+      urgency: '地窖冷，执法官明日午时到村。再晚些，能问到的话只会更少。',
+      nextStep: '先问昨夜是谁把汉克押走的，再问今天还有谁肯见她。',
       actions: [
         isHere('nora')
-          ? { label: '先这样问她', input: '对诺拉说：先别急，把你知道的从头告诉我。' }
+          ? {
+              label: '问昨夜情况',
+              input: '对诺拉说：昨夜是谁把你父亲押走的？他在地窖里现在怎么样？',
+            }
           : canMoveTo('bridge')
             ? { label: '回桥头找诺拉', action: { type: 'move', target: 'bridge' } }
             : canMoveTo('square')
               ? { label: '先回广场转桥头', action: { type: 'move', target: 'square' } }
             : { label: '先环顾这里', action: { type: 'look' } },
-        { label: '环顾桥头/周围', action: { type: 'look' } },
+        { label: '环顾桥头', action: { type: 'look' } },
       ],
     };
   }
@@ -266,12 +269,12 @@ function buildEpisodePrimer(params: {
   if (!hasItem('cellar_key')) {
     return {
       focusName: '艾德蒙',
-      focusRole: '村长 / 阴谋枢纽',
-      pulse: contacted.has('edmond')
-          ? '你已经见过艾德蒙，但还没把钥匙拿到手。现在别让话题继续散开，回去把“先见汉克”这件事咬住。'
-          : '想见汉克，先得过艾德蒙这一关。他嘴上说的是大局，心里护的却未必只是村子。',
-      stake: '他既想保住儿子，也想保住自己仍像个能护住全村的村长。',
-      approach: '别先跟他辩公道，先让他说完“规矩”和“大局”，再咬住钥匙。',
+      focusRole: '村长 / 地窖钥匙在他手里',
+      summary: contacted.has('edmond')
+        ? '你已经见过艾德蒙，钥匙还没拿到。'
+        : '要见汉克，先得从艾德蒙手里把钥匙拿出来。',
+      urgency: '他现在管着地窖，也管着村里怎么往外说这件事。',
+      nextStep: '把话咬在“我要见汉克”上，先别陪他空转规矩和大局。',
       actions: [
         canMoveTo('elder_house')
           ? { label: '去村长宅邸', action: { type: 'move', target: 'elder_house' } }
@@ -279,8 +282,8 @@ function buildEpisodePrimer(params: {
             ? { label: '先去广场', action: { type: 'move', target: 'square' } }
             : { label: '先环顾这里', action: { type: 'look' } },
         isHere('edmond')
-          ? { label: '先向他要钥匙', input: '对艾德蒙说：我想先见汉克。' }
-          : { label: '准备开口方式', input: '对艾德蒙说：我想先见汉克。' },
+          ? { label: '先向他要钥匙', input: '对艾德蒙说：我现在要见汉克。钥匙给我。' }
+          : { label: '准备开口方式', input: '对艾德蒙说：我现在要见汉克。钥匙给我。' },
       ],
     };
   }
@@ -289,18 +292,21 @@ function buildEpisodePrimer(params: {
     return {
       focusName: '汉克',
       focusRole: '被告 / 沉默真相承载者',
-      pulse: '见到汉克时，先别逼命案。先听他第一句问什么，那比任何口供都更快告诉你他在护谁。',
-      stake: '他不是不想活，是更怕诺拉替他活不下去。',
-      approach: '别先逼凶手是谁，先让他确认诺拉会不会被你拖进去。',
+      summary: '见到汉克后，先听他第一句问谁。',
+      urgency: '他已经被关了很久。越往后，他越只会把话往回咽。',
+      nextStep: '先提诺拉，再问昨夜是谁先到铁匠铺。',
       actions: [
         canMoveTo('cellar')
           ? { label: '去地窖见汉克', action: { type: 'move', target: 'cellar' } }
           : canMoveTo('elder_house')
             ? { label: '先去宅邸', action: { type: 'move', target: 'elder_house' } }
             : canMoveTo('square')
-              ? { label: '先回广场转宅邸', action: { type: 'move', target: 'square' } }
+            ? { label: '先回广场转宅邸', action: { type: 'move', target: 'square' } }
               : { label: '先环顾这里', action: { type: 'look' } },
-        { label: '准备第一句', input: '对汉克说：诺拉还在等你开口。你先告诉我，她现在最该防什么。' },
+        {
+          label: '准备第一句',
+          input: '对汉克说：诺拉还在外头等你。你先告诉我，昨夜是谁先到铁匠铺的？',
+        },
       ],
     };
   }
@@ -308,26 +314,31 @@ function buildEpisodePrimer(params: {
   if (!contacted.has('mila') || !contacted.has('gareth')) {
     return {
       focusName: !contacted.has('mila') ? '米拉' : '加雷斯',
-      focusRole: !contacted.has('mila') ? '村医 / 伤情与伦理节点' : '矿工班头 / 舆论节点',
-      pulse:
-        '现在别急着下结论。你需要一边把伤情拉回事实，一边看清全村到底是谁在退、谁在带口风。',
-      stake: !contacted.has('mila')
-        ? '她怕自己的专业判断被权力拿去伤另一个无辜的人。'
-        : '他想护汉克，也怕矿工几十口人的饭碗先跟着出事。',
-      approach: !contacted.has('mila')
-        ? '只问伤情和时间，不要让她替你下道德结论。'
-        : '先说明你不是来挑软柿子的，再问谁在急着把汉克先定下来。',
+      focusRole: !contacted.has('mila') ? '村医 / 伤情线入口' : '矿工班头 / 口风线入口',
+      summary: '现在要补两件事：伤情和口风。',
+      urgency: !contacted.has('mila')
+        ? '米拉手里有伤情和时间，能把话从口风里拽回来。'
+        : '加雷斯知道矿工里谁在带头说话，谁只是跟着闭嘴。',
+      nextStep: !contacted.has('mila')
+        ? '只问伤口、时间和谁先碰过尸体。'
+        : '先问昨夜谁在场，再问今天谁说得最凶。',
       actions: [
         !contacted.has('mila') && canMoveTo('clinic')
           ? { label: '先去诊所', action: { type: 'move', target: 'clinic' } }
           : !contacted.has('gareth') && canMoveTo('miners_quarter')
             ? { label: '去矿工棚屋区', action: { type: 'move', target: 'miners_quarter' } }
             : canMoveTo('square')
-              ? { label: '回广场再转场', action: { type: 'move', target: 'square' } }
-              : { label: '先环顾这里', action: { type: 'look' } },
+            ? { label: '回广场再转场', action: { type: 'move', target: 'square' } }
+            : { label: '先环顾这里', action: { type: 'look' } },
         !contacted.has('mila')
-          ? { label: '准备问米拉', input: '对米拉说：我需要你只按伤情告诉我，哪里和口供对不上。' }
-          : { label: '准备问加雷斯', input: '对加雷斯说：现在村里到底是谁在急着把汉克先定下来？' },
+          ? {
+              label: '准备问米拉',
+              input: '对米拉说：你只按伤情告诉我，伤口和口供哪里对不上？',
+            }
+          : {
+              label: '准备问加雷斯',
+              input: '对加雷斯说：昨夜谁在场？今天又是谁说得最凶？',
+            },
       ],
     };
   }
@@ -1179,19 +1190,19 @@ export default function GameView({
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="min-w-0">
               <div className="text-[11px] font-bold mb-1" style={{ color: 'var(--npc-color)' }}>
-                当前焦点 · {episodePrimer.focusName}
+                眼下先看 · {episodePrimer.focusName}
               </div>
               <div className="text-sm leading-relaxed" style={{ color: 'var(--foreground)' }}>
-                {episodePrimer.pulse}
+                {episodePrimer.summary}
               </div>
               <div className="mt-2 text-[11px]" style={{ color: 'var(--muted)' }}>
                 {episodePrimer.focusRole}
               </div>
               <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'var(--player-color)' }}>
-                在意：{episodePrimer.stake}
+                眼下：{episodePrimer.urgency}
               </div>
               <div className="mt-1 text-[11px] leading-relaxed" style={{ color: 'var(--npc-color)' }}>
-                切口：{episodePrimer.approach}
+                先问：{episodePrimer.nextStep}
               </div>
             </div>
             <div className="flex gap-2 flex-wrap">
@@ -1278,19 +1289,19 @@ export default function GameView({
                   style={{ borderColor: 'var(--border)', background: 'rgba(122,176,212,0.04)' }}
                 >
                   <div className="text-[11px] font-bold mb-1" style={{ color: 'var(--npc-color)' }}>
-                    当前焦点 · {episodePrimer.focusName}
+                    眼下先看 · {episodePrimer.focusName}
                   </div>
                   <div className="text-sm leading-relaxed" style={{ color: 'var(--foreground)' }}>
-                    {episodePrimer.pulse}
+                    {episodePrimer.summary}
                   </div>
                   <div className="mt-2 text-[11px]" style={{ color: 'var(--muted)' }}>
                     {episodePrimer.focusRole}
                   </div>
                   <div className="mt-1 text-[11px]" style={{ color: 'var(--player-color)' }}>
-                    在意：{episodePrimer.stake}
+                    眼下：{episodePrimer.urgency}
                   </div>
                   <div className="mt-1 text-[11px]" style={{ color: 'var(--npc-color)' }}>
-                    切口：{episodePrimer.approach}
+                    先问：{episodePrimer.nextStep}
                   </div>
                   <div className="mt-3 flex gap-2 flex-wrap">
                     {episodePrimer.actions.map((action) => (

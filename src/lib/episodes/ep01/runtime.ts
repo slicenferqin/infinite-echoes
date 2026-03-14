@@ -61,14 +61,14 @@ function applySlotEvents(
   if (context.toSlotIndex === 1 && !nextState.flags.beat_morning_opinion) {
     nextState = setFlag(nextState, 'beat_morning_opinion');
     notifications.push(
-      '【舆论发酵】广场口风开始偏向“先定罪再说”，诺拉正承受当面指责。你接下来的对话立场会影响谁愿意继续开口。建议优先接触诺拉或加雷斯，先稳住人证链。'
+      '【舆论发酵】广场上的口风开始往“先定罪再说”那边倒，诺拉一露面就容易被堵回去。再晚些，肯当面说话的人只会更少。建议优先接触诺拉或加雷斯。'
     );
   }
 
   if (context.toSlotIndex === 2 && !nextState.flags.beat_noon_medical_conflict) {
     nextState = setFlag(nextState, 'beat_noon_medical_conflict');
     notifications.push(
-      '【证词冲突】诊所传出争论：伤情判断与现有口供对不上。若你只追口风，不补医学侧证，后续推理会偏。建议先找米拉核对伤情，再回到案发点复查。'
+      '【证词冲突】诊所那边传出争执：伤口深浅和现有说法对不上。若不把伤情问实，后面的判断容易被带偏。建议先找米拉，再回案发点复查。'
     );
   }
 
@@ -76,14 +76,14 @@ function applySlotEvents(
     if (!nextState.flags.beat_afternoon_split) {
       nextState = setFlag(nextState, 'beat_afternoon_split');
       notifications.push(
-        '【立场分裂】午后矿工内部口风出现分裂：有人要“保秩序”，有人要“保人命”。你若不尽快建立可信立场，后续证词会更保守。建议先和加雷斯沟通，再选择一条证据线深入。'
+        '【立场分裂】午后矿工之间先吵起来了：有人要先保住秩序，有人说不能把命糊过去。口风一乱，证词会更谨慎。建议先找加雷斯，再选一条证据线追深。'
       );
     }
 
     if (!nextState.flags.met_renn) {
       nextState = setFlag(nextState, 'renn_fleeing');
       notifications.push(
-        '【时间敏感】你听见后山道有收拾行李的动静，疑似有人准备离村。若要锁定雷恩动向，需在傍晚前处理。建议立刻前往后山道，或先问到更具体方向再追。'
+        '【时间敏感】后山道传来收拾行李的动静，像有人要趁天黑前离村。若要追雷恩，现在就是窗口。建议立刻去后山道，或先问清方向再追。'
       );
     }
   }
@@ -92,7 +92,7 @@ function applySlotEvents(
     if (!nextState.flags.beat_evening_pressure) {
       nextState = setFlag(nextState, 'beat_evening_pressure');
       notifications.push(
-        '【舆论升温】广场出现“今晚定性”的集体施压。你不必立刻去广场；但从现在开始，你与NPC的对话取向和最终提交都会被视为公开表态。建议优先补齐关键证据，再决定裁断立场。'
+        '【舆论升温】广场上已经有人催着今晚把话定死。你不必立刻去广场，但从现在起，你的站位会被人记住。建议先补齐关键证据，再决定怎么表态。'
       );
     }
 
@@ -108,7 +108,7 @@ function applySlotEvents(
       if (!nextState.flags.renn_escaped) {
         nextState = setFlag(nextState, 'renn_escaped');
         notifications.push(
-          '【窗口关闭】傍晚矿道口传来消息：雷恩已失去公开接触窗口。若你尚未拿到其关键矛盾证词，本局翻案难度将明显上升。建议转向物证链与汉克沉默成因。'
+          '【窗口关闭】傍晚传来消息：雷恩已经不在公开能找到的地方。若你还没拿到他的矛盾证词，后面只能更多依靠物证和时间线。'
         );
       }
     }
@@ -118,7 +118,7 @@ function applySlotEvents(
     if (!nextState.flags.beat_night_father_daughter) {
       nextState = setFlag(nextState, 'beat_night_father_daughter');
       notifications.push(
-        '【情感临界】入夜前诺拉情绪崩溃，父女线已到临界点。若你仍未补足关键证据，最终裁断会更容易滑向程序定性。建议优先完成最后一条核心证据链。'
+        '【夜色压下来】天一黑，诺拉在宅邸外已经站不住了。再拖下去，你能从父女这条线上问到的话只会更少。建议尽快补完最后一条核心证据。'
       );
     }
 
@@ -151,7 +151,7 @@ function applyDynamicEvents(
   ) {
     nextState = setFlag(nextState, 'ep01_square_anchor_seen');
     notifications.push(
-      '【先开审的是村子】广场上没人正式宣布汉克有罪，可你一路走过去，井边有人看见诺拉就闭了嘴，卖炭的人把摊子往后挪，像怕和她扯上关系。这里最可怕的不是骂声，而是很多人明知不对，也先往后退了一步。'
+      '【广场口风】井边的人见诺拉过来就住了口，卖炭的把摊子往后挪开，谁都不肯多停一步。这里的话越晚越难问。建议尽快接触还愿意正面开口的人。'
     );
   }
 
@@ -162,7 +162,7 @@ function applyDynamicEvents(
   ) {
     nextState = setFlag(nextState, 'ep01_nora_anchor_seen');
     notifications.push(
-      '【她押上的是最后一点体面】诺拉掌心那枚旧铁戒已经被捏得发亮。你忽然意识到，她不是在找人替自己伸冤，她是在赌父亲还能不能活到明天。'
+      '【旧铁戒】诺拉手里那枚旧铁戒被她攥得发亮。她翻来覆去说的只有一件事：先去见汉克。建议先下地窖，再回来补问她昨夜的细节。'
     );
   }
 
@@ -184,7 +184,7 @@ function applyDynamicEvents(
   ) {
     nextState = setFlag(nextState, 'ep01_edmond_anchor_seen');
     notifications.push(
-      '【另一种父亲】艾德蒙嘴里全是“规矩”和“大局”，可你听得出来，他每一句都像在把雷恩往自己身后藏。这个人不只是村长，也是已经错到回不了头的父亲。'
+      '【艾德蒙的口风】艾德蒙翻来覆去只说“规矩”“大局”，可一提到雷恩就把话岔开。想从他手里拿到更多东西，先让他把话说满，再抓矛盾。'
     );
   }
 
@@ -192,14 +192,14 @@ function applyDynamicEvents(
     if (!nextState.flags.ep01_hank_anchor_seen) {
       nextState = setFlag(nextState, 'ep01_hank_anchor_seen');
       notifications.push(
-        '【先问的不是命案】你刚提到诺拉掌心那枚旧铁戒，汉克喉结就滚了一下。那是他十岁那年亲手给她打的，尺寸早就不合了，她却一直舍不得丢。你一下明白，他沉默里护着的首先不是自己，而是女儿。'
+        '【汉克先问的人】你一提诺拉，汉克先问的是她，而不是命案。要继续往下问，先把诺拉现在的处境和昨夜发生的事问清。'
       );
     }
 
     if (nextState.flags.beat_evening_pressure && !nextState.flags.hank_pressure_notice) {
       nextState = setFlag(nextState, 'hank_pressure_notice');
       notifications.push(
-        '【沉默代价】汉克明确表达“外头越催，越不能乱开口”。这代表他更在意家人连坐风险而非自证清白。建议先证明你能保护诺拉处境，再追问核心事实。'
+        '【沉默代价】汉克反复提外头催得越凶，越不能乱说。若你想继续问下去，先让他相信诺拉不会被这话牵进去。'
       );
     }
   }
@@ -208,7 +208,7 @@ function applyDynamicEvents(
     if (nextState.flags.beat_night_father_daughter && !nextState.flags.nora_breakdown_noted) {
       nextState = setFlag(nextState, 'nora_breakdown_noted');
       notifications.push(
-        '【关系变化】诺拉从崩溃转为“硬撑”状态，说明她愿意承担乡评压力保父亲。此时更适合用“如何救人”的问题推进，而非重复追问“是不是他干的”。'
+        '【关系变化】诺拉哭过一场后反而不再乱说，只一遍遍问你见没见到汉克。此时比起再问“是谁干的”，更适合先谈怎么让人活过明天。'
       );
     }
   }
