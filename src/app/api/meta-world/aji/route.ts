@@ -64,7 +64,10 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     if (error instanceof LlmError) {
-      const fallbackReply = buildPersistentCounselorFallbackReply('aji', payload.data.message);
+      const fallbackReply =
+        error.type === 'config'
+          ? '我先按简化模式陪你把思路理清。等 live LLM 接好，这里的回应会更完整。'
+          : buildPersistentCounselorFallbackReply('aji', payload.data.message);
       const nextMetaWorld = upsertMetaWorldState(
         applyPersistentCounselorConversationEffects({
           npcId: 'aji',

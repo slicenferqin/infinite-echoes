@@ -277,7 +277,9 @@ export async function POST(request: Request) {
         state = addNarrative(
           state,
           'system',
-          '评估回响出现短暂干扰，系统已按保守规则完成判定。'
+          error.type === 'config'
+            ? '当前未接入 live LLM，结算评估已回退到保守占位模式。该结果适合联调，不适合正式体验。'
+            : '评估回响出现短暂干扰，系统已按保守规则完成判定。'
         );
       } else {
         throw error;

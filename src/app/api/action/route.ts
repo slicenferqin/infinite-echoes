@@ -805,7 +805,10 @@ export async function POST(request: Request) {
           }
         } catch (error) {
           if (error instanceof LlmError) {
-            talkFallbackNotice = '对话一时被噪声打断。你只能先记下对方的沉默反应。';
+            talkFallbackNotice =
+              error.type === 'config'
+                ? '当前未接入 live LLM，对话已切到保守占位模式。你仍可继续联调流程，但内容表现会更简化。'
+                : '对话一时被噪声打断。你只能先记下对方的沉默反应。';
             parsedNpc = {
               text: '……先让我静一静。',
               delta: 0,
@@ -1109,7 +1112,9 @@ export async function POST(request: Request) {
             state = addNarrative(
               state,
               'system',
-              '【搜查受干扰】现场回响紊乱，本次搜查仅能得到表层结果（通常不会产出关键线索）。建议先与相关人物交谈，或更换地点后再搜查。'
+              error.type === 'config'
+                ? '【搜查使用占位模式】当前未接入 live LLM，搜查结果已回退为保守占位文本。你仍可继续验证流程。'
+                : '【搜查受干扰】现场回响紊乱，本次搜查仅能得到表层结果（通常不会产出关键线索）。建议先与相关人物交谈，或更换地点后再搜查。'
             );
           } else {
             throw error;
