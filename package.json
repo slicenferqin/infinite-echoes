@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "doctor": "node scripts/doctor.mjs"
+    "doctor": "node scripts/doctor.mjs",
+    "db:reset": "node scripts/db-reset.mjs",
+    "smoke:mock": "node scripts/smoke-mock.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",

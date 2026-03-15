@@ -19,6 +19,8 @@
 npm install
 cp .env.local.example .env.local
 npm run doctor
+npm run db:reset
+npm run smoke:mock
 npm run dev
 ```
 
@@ -49,6 +51,8 @@ LLM_MODEL=your_model_name
 
 ```bash
 npm run doctor
+npm run db:reset
+npm run smoke:mock
 npm run lint
 npm run build
 ```

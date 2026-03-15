@@ -67,16 +67,20 @@ Notes:
 
 ```bash
 npm run doctor
+npm run db:reset
 npm run dev
 npm run lint
 npm run build
 npm run start
+npm run smoke:mock
 ```
 
 ## Contributor Onboarding
 
 - 默认推荐先用 `mock` 模式接入，先验证登录、选本、进度、数据库、交互流程。
 - 只有在需要调 NPC 表现、搜查文本、结算质量时，再切 `live` 模式。
+- `npm run db:reset` 会清空本地开发库；默认拒绝删除疑似生产库，除非显式加 `--force`。
+- `npm run smoke:mock` 会在临时端口拉起 mock 服务，跑一条注册 → 开局 → 对话 → 观察 → 结算的冒烟链路。
 - 详细约定见 `CONTRIBUTING.md`
 
 ## Project Structure
